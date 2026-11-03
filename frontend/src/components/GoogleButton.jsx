@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/auth'
-import { getGoogleIdToken, googleConfigured } from '../lib/firebase'
+import { getGoogleIdToken, googleConfigured, preloadGoogle } from '../lib/firebase'
 
 const GoogleMark = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -16,6 +16,9 @@ const GoogleMark = () => (
 export default function GoogleButton({ onSuccess, onError }) {
   const { googleLogin } = useAuth()
   const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (googleConfigured) preloadGoogle().catch(() => {}) // fetched again on click if this fails
+  }, [])
   if (!googleConfigured) {
     if (!import.meta.env.DEV) return null
     return (
