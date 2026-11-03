@@ -98,7 +98,7 @@ export default function StaffDashboard({ admin }) {
 
   return (
     <div className="stack">
-      {admin && <ClubOverview onStudents={() => setParams({ view: 'students' })} />}
+      {admin && <ClubOverview />}
 
       <section aria-labelledby="events-title">
         <div className="sec-head mb-md">
@@ -141,7 +141,7 @@ export default function StaffDashboard({ admin }) {
 }
 
 // Club-wide numbers (ADMIN only): GET /api/analytics/overview
-function ClubOverview({ onStudents }) {
+function ClubOverview() {
   const [o, setO] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -150,10 +150,7 @@ function ClubOverview({ onStudents }) {
 
   return (
     <section aria-labelledby="overview-title">
-      <div className="sec-head mb-md">
-        <h2 id="overview-title">Overview</h2>
-        <button className="btn btn--sm btn--ghost" onClick={onStudents}>All students</button>
-      </div>
+      <h2 id="overview-title" className="mb-md">Overview</h2>
       <Alert>{error}</Alert>
       {!o ? !error && <Loading /> : (
         <div className="stats">

@@ -68,7 +68,7 @@ export default function Students({ onBack }) {
   return (
     <div className="stack">
       <div>
-        <button className="link-btn small muted" onClick={onBack}>&larr; Dashboard</button>
+        <button className="link-btn small muted" onClick={onBack}>&larr; Manage the club</button>
         <h2 className="mt-sm">All students</h2>
         <p className="muted mb-0">Everyone with a Swayam account, their details and the events they hold a seat for.</p>
       </div>

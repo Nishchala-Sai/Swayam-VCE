@@ -1,11 +1,12 @@
 # Backend
 
 One Express 5 API (Node.js 20+, ES modules) in `backend/`, using **Neon** serverless PostgreSQL through **Drizzle ORM**.
-Authentication is a JWT in an httpOnly cookie (email and password, or Google via Firebase). Paid events use manual UPI payments verified by an admin.
+Sign-in is **Google only** (Firebase verifies the Google account); the session is our own JWT in an httpOnly cookie.
+There are no passwords and the API sends no email. Paid events use manual UPI payments verified by staff.
 For the overall picture and folder structure see `docs/ARCHITECTURE.md`.
 
-**Status:** built: database connection, `users`, `events` and `registrations` tables, `requireAuth`, `requireRole`, the auth module (register, login, logout, me, Sign in with Google, password reset, profile name)
-with rate limiting and Cloudflare Turnstile, the events module (create, list, get), the registrations module (solo and team registration, my registrations, QR tickets), the manual UPI payments module (submit proof, staff queue, approve or reject with refund overflow, refunds, reject remaining), sub-events with pass-holder pricing and bookings, QR check-in for events and sub-events, and analytics.
+**Status:** built: database connection, `users`, `events` and `registrations` tables, `requireAuth`, `requireRole`, the auth module (Sign in with Google, emergency login links, logout, me, student profile)
+with rate limiting, the events module (create, list, get), the registrations module (solo and team registration, my registrations, QR tickets), the manual UPI payments module (submit proof, staff queue, approve or reject with refund overflow, refunds, reject remaining), sub-events with pass-holder pricing and bookings, QR check-in for events and sub-events, analytics, the live registrations data and Excel/CSV exports.
 
 ## 1. Set up locally
 
@@ -24,8 +25,7 @@ Requires Node.js 20+ and a free Neon account (https://neon.tech). Nothing runs i
    ```
    For reference, these are the commands that created the dependency list:
    ```bash
-   npm install express drizzle-orm @neondatabase/serverless jsonwebtoken cookie-parser cors helmet bcryptjs dotenv express-rate-limit
-   npm install -D drizzle-kit
+   npm install express drizzle-orm drizzle-kit @neondatabase/serverless jsonwebtoken cookie-parser cors helmet dotenv express-rate-limit firebase-admin multer cloudinary
    ```
 4. **Create the tables.**
    ```bash
@@ -50,11 +50,16 @@ shared database. A branch has its own connection string; put it in your `.env`.
 | `npm run db:baseline` | One-off: mark `0000_init` as applied on a database created earlier with `db:push`. Checks every table and column exists first |
 | `npm run db:studio` | Open Drizzle Studio, a browser UI for viewing and editing rows |
 | `npm run db:seed` | Create or reset the three test accounts (see `users` below) |
+| `npm run login-link -- <email>` | Print a 10-minute sign-in link for an existing account (section 4). For local development and for when Google sign-in is down |
 
 ### Changing the schema (migrations)
 The schema lives in `src/db/schema.js`; the database is changed only by the versioned SQL files in `drizzle/`, which are
-committed and reviewed in pull requests. Column names in the database are `snake_case` (`password_hash`); in JavaScript
-they are `camelCase` (`passwordHash`).
+committed and reviewed in pull requests. Column names in the database are `snake_case` (`roll_number`); in JavaScript
+they are `camelCase` (`rollNumber`).
+
+Migrations so far: `0000_init` (every table), `0001_google_only_sign_in` (drops `password_reset_tokens`, makes
+`users.password_hash` nullable and clears it), `0002_student_profile` (`users.phone`, `roll_number`, `branch`, `year`).
+Each one is written so the code already running keeps working while Render deploys the next version.
 
 1. Edit `src/db/schema.js`.
 2. `npm run db:generate -- --name add_event_tags` writes `drizzle/0001_add_event_tags.sql`. Read it: renames and drops
@@ -91,22 +96,19 @@ Never commit `.env` (it is git-ignored). Never paste PRIVATE values into chat, i
 | `JWT_SECRET` | **PRIVATE** | At least 32 random characters. Required. Changing it logs everyone out. Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `JWT_EXPIRES_IN` | not secret | Login lifetime, e.g. `7d`. Default `7d` |
 | `QR_SECRET` | **PRIVATE** | Signs QR tickets. Required. At least 32 random characters, different from `JWT_SECRET`. Changing it invalidates every ticket already issued |
-| `TURNSTILE_SECRET` | **PRIVATE** | Cloudflare Turnstile secret key. Required. Locally use the test secret `1x0000000000000000000000000000000AA` (always passes) or `2x0000000000000000000000000000000AA` (always fails) |
 | `TRUST_PROXY` | not secret | Number of proxies in front of the API: `0` locally, `1` on Render alone, `2` on Render behind the Vercel `/api` rewrite (`docs/DEPLOYMENT.md`). Rate limiting is wrong without it (section 4) |
-| `FIREBASE_PROJECT_ID` | not secret | Firebase project id for "Sign in with Google". Optional: without it `/api/auth/google-login` answers 503 |
-| `FRONTEND_URL` | not secret | Public URL of the website, used in password-reset links. Default: the first `CORS_ORIGIN` |
+| `FIREBASE_PROJECT_ID` | not secret | Firebase project id for "Sign in with Google", the only way to sign in. Must match the frontend's `VITE_FIREBASE_PROJECT_ID` exactly (no quotes). Without it `/api/auth/google-login` answers 503 |
+| `FRONTEND_URL` | not secret | Public URL of the website, used in login links (`npm run login-link`) and their redirects. Default: the first `CORS_ORIGIN` |
 | `PORT` | not secret | Default `4000` |
 | `NODE_ENV` | not secret | `production` turns on `secure` cookies |
 | `CORS_ORIGIN` | not secret | Frontend URL(s), comma separated. Default `http://localhost:5173` |
 | `CLOUDINARY_URL` | **PRIVATE** | `cloudinary://<key>:<secret>@<cloud>`. Uploaded QR and banner images go to Cloudinary; without it they are saved in `UPLOAD_DIR` (development) |
 | `UPLOAD_DIR` | not secret | Local upload folder when `CLOUDINARY_URL` is unset. Default `backend/uploads` |
-| `BREVO_SMTP_USER` | not secret | Brevo SMTP login (Brevo > SMTP & API > SMTP). With either Brevo value unset, emails are printed in the terminal |
-| `BREVO_SMTP_PASS` | **PRIVATE** | A Brevo SMTP key |
-| `EMAIL_FROM` | not secret | Sender, e.g. `Swayam E-Cell <noreply@your-domain>`. Must be a sender or domain verified in Brevo |
 
 The UPI ID and payee name are stored per event (`events.upi_id`, `events.upi_payee_name`), not in the environment.
+`TURNSTILE_SECRET`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS` and `EMAIL_FROM` are no longer used; delete them.
 
-The server refuses to start if `DATABASE_URL`, `JWT_SECRET`, `TURNSTILE_SECRET` or `QR_SECRET` is missing.
+The server refuses to start if `DATABASE_URL`, `JWT_SECRET` or `QR_SECRET` is missing.
 
 ## 3. Database
 
@@ -115,23 +117,25 @@ The server refuses to start if `DATABASE_URL`, `JWT_SECRET`, `TURNSTILE_SECRET` 
 |---|---|---|
 | `id` | uuid, primary key | `gen_random_uuid()` |
 | `email` | varchar(255), unique | Store lowercased |
-| `name` | varchar(100), nullable | Display name. Set at signup (`PATCH /api/auth/me`), on the profile page, or from Google |
-| `password_hash` | varchar(255) | bcrypt hash. Google-created accounts get the hash of a random password until they set one |
+| `name` | varchar(100), nullable | Display name. From Google, then editable (`PATCH /api/auth/me`) |
+| `password_hash` | varchar(255), nullable | **Unused.** Sign-in is Google-only; migration 0001 cleared every hash. Kept only so a deploy never meets a missing column; drop it in a later release |
+| `phone` | varchar(10), nullable | Indian mobile, 10 digits without +91 (the WhatsApp number) |
+| `roll_number` | varchar(30), nullable | Uppercased, e.g. `1602-23-733-042` |
+| `branch` | varchar(60), nullable | e.g. `CSE (AI & ML)` |
+| `year` | integer, nullable | 1 to 4 (check constraint `users_year_range`) |
 | `role` | enum `user_role` | `STUDENT` (default), `EVENT_HEAD`, `ADMIN` |
 | `is_active` | boolean | Default `true`. `false` blocks the user everywhere |
 | `created_at` | timestamptz | Default `now()` |
 
-The first `ADMIN`: sign up normally, then change that user's `role` to `ADMIN` in `npm run db:studio`.
+The student details are null until the person fills them in on `/welcome`; registering needs all of them (section 4).
+
+The first `ADMIN`: sign in with Google once, then change that user's `role` to `ADMIN` in `npm run db:studio` or the
+Neon SQL editor (`update users set role = 'ADMIN' where email = '...';`).
 
 Test accounts: `npm run db:seed` (`scripts/seed-users.js`) creates or resets `admin@swayam.com` (ADMIN),
-`manager@swayam.com` (EVENT_HEAD) and `student@swayam.com` (STUDENT), all with the password `Password123!`, hashed
-with the same bcrypt cost as signup. It is safe to re-run, and refuses to run with `NODE_ENV=production` unless given
-`--force`, because the password is public. Delete or deactivate these accounts before launch.
-
-### `password_reset_tokens` (built)
-`id`, `user_id` → `users.id`, `token_hash` (SHA-256 hex of the emailed token, unique), `expires_at` (30 minutes after
-the request), `created_at`. The token itself is never stored. A row is deleted when it is used; requesting a new link
-deletes the user's older rows.
+`manager@swayam.com` (EVENT_HEAD) and `student@swayam.com` (STUDENT) with made-up student details. Nobody can sign in
+to them with Google; use `npm run login-link -- admin@swayam.com`. It refuses to run with `NODE_ENV=production` unless
+given `--force`. On the production database these accounts are deactivated.
 
 ### `events` (built)
 | Column | Type | Notes |
@@ -193,92 +197,74 @@ Protected routes need the `token` cookie. The frontend must send requests with `
 "Signed in" means `requireAuth` passes; role checks run after it.
 
 ### Auth (`src/modules/auth`, built)
+Sign-in is **Google only**. There is no password registration, login or reset: those endpoints were removed and
+answer 404.
+
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/auth/register` | anyone | `{ email, password, turnstileToken }`. Creates a `STUDENT`, sets the cookie, returns the user (201) |
-| POST | `/api/auth/login` | anyone | `{ email, password, turnstileToken }`. Sets the cookie, returns the user |
-| POST | `/api/auth/logout` | anyone | Clears the cookie |
-| GET | `/api/auth/me` | signed in | The current user (`id, email, name, role, isActive, createdAt`). The frontend calls this on load to restore the session |
-| PATCH | `/api/auth/me` | signed in | `{ name }` (1 to 100 characters). Sets the display name; returns the updated user |
 | POST | `/api/auth/google-login` | anyone | `{ idToken }`: a Firebase ID token from "Sign in with Google". Finds or creates the user, sets the cookie (see below) |
-| POST | `/api/auth/forgot-password` | anyone | `{ email, turnstileToken }`. Always answers 200 with the same message; sends (for now: logs) a reset link if the account exists |
-| POST | `/api/auth/reset-password` | anyone | `{ token, password }`. Sets a new password from a reset link (see below) |
+| GET | `/api/auth/link?token=...` | anyone | Opens an emergency login link (see below). Redirects to `/dashboard` with the cookie set, or to `/login?link=invalid` |
+| POST | `/api/auth/logout` | anyone | Clears the cookie |
+| GET | `/api/auth/me` | signed in | The current user: `id, email, name, phone, rollNumber, branch, year, role, isActive, createdAt` and `profileComplete`. The frontend calls this on load to restore the session |
+| PATCH | `/api/auth/me` | signed in | Any of `{ name, phone, rollNumber, branch, year }`; updates only the fields sent and returns the user (see Student profile) |
 
-| Status | When |
-|---|---|
-| 400 | Invalid email, or password not 8 to 72 characters (register) |
-| 403 | `turnstileToken` missing or rejected by Cloudflare: `CAPTCHA verification failed. Are you a bot?` |
-| 409 | Register with an email that already has an account |
-| 401 | Login with an unknown email, wrong password or deactivated account. Always the same `Invalid email or password.` so attackers can't tell which emails are registered |
-| 429 | Rate limit reached (see below) |
+The session is a JWT `{ sub: <user id> }` signed with HS256 in the `token` cookie (`httpOnly`, `secure` in
+production, `sameSite: 'lax'`), which expires at the same moment as the token (`JWT_EXPIRES_IN`, default 7 days).
 
-**Register** lowercases the email, hashes the password with bcrypt (cost 12) and inserts the user.
-**Login** compares against a dummy hash when the email is unknown, so the response time doesn't reveal whether an
-account exists. The JWT `{ sub: <user id> }` is signed with HS256 and put in the `token` cookie (`httpOnly`, `secure` in
-production, `sameSite: 'lax'`), which expires at the same moment as the token. Passwords over 72 bytes are rejected
-because bcrypt ignores everything after byte 72.
-
-### Bot and brute-force protection
-Two layers, both on register and login only.
-
-**1. Rate limit** (`src/middleware/rateLimiter.js`, `express-rate-limit`). `authLimiter` allows **10 requests per 15
-minutes per IP**, counted across register and login together. Request 11 gets 429
-`Too many requests, please try again after 15 minutes.` Responses carry `RateLimit` and `RateLimit-Policy` headers.
+### Rate limiting
+`authLimiter` (`src/middleware/rateLimiter.js`, `express-rate-limit`) allows **10 requests per 15 minutes per IP**
+across `google-login` and `link`. Request 11 gets 429 `Too many requests, please try again after 15 minutes.`
+Responses carry `RateLimit` and `RateLimit-Policy` headers.
 - Counts are kept in memory: they reset when the server restarts and are not shared if you run more than one instance.
-  For several instances, give the limiter a shared store (e.g. `rate-limit-redis`).
-- Behind a hosting proxy set `TRUST_PROXY=1`. With `0` there, every student shares the proxy's IP, so 10 logins from
-  the whole college lock everyone out. Never set it higher than the real number of proxies, or clients can fake their IP.
-- Students on the same college Wi-Fi share one public IP. If that blocks real users at event launches, raise `limit`.
+- Behind a hosting proxy set `TRUST_PROXY` (2 behind the Vercel rewrite on Render). With `0` there, every student shares
+  the proxy's IP, so 10 sign-ins from the whole college lock everyone out. Never set it higher than the real number of
+  proxies, or clients can fake their IP.
 
-**2. CAPTCHA** (`src/utils/verifyTurnstile.js`, Cloudflare Turnstile, free). The controller checks the body first, then
-sends `turnstileToken` (plus the client IP) to Cloudflare's `siteverify` API with `TURNSTILE_SECRET`. A missing token,
-a rejection, a network error or a 5-second timeout all count as failed (403). Tokens are single-use and expire after
-5 minutes, so the frontend must get a new one (`turnstile.reset()`) after every failed attempt.
-
-**Frontend side** (`pages/Auth.jsx`): add the widget script
-`<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`, render
-`<div class="cf-turnstile" data-sitekey="...">` in the login and signup forms (or use the `@marsidev/react-turnstile`
-package), and send its token as `turnstileToken`. The **site key** is public and goes in `frontend/.env` as
-`VITE_TURNSTILE_SITE_KEY`. For local development use Cloudflare's test site key `1x00000000000000000000AA`.
-
-**Cloudflare setup:** Cloudflare dashboard → Turnstile → Add widget → add your domains (and `localhost`) → copy the
-site key (frontend) and secret key (`TURNSTILE_SECRET`, backend).
+There is no CAPTCHA: Google's sign-in popup is the bot check.
 
 ### Sign in with Google (`google.controller.js`, built)
 Firebase Authentication is used **only** to prove who the user is. The website signs in with Google through Firebase
 (popup), takes the Firebase **ID token**, and posts it to `POST /api/auth/google-login`. The backend verifies the token
-with the Firebase Admin SDK (`firebase-admin`), then works exactly like `/login`: it finds or creates the user in Neon
-and sets our own JWT cookie. Roles, sessions and data stay in our API.
+with the Firebase Admin SDK (`firebase-admin`), finds or creates the user in Neon and sets our own JWT cookie. Roles,
+sessions and data stay in our API.
 
 - Accepted only if the token is valid for `FIREBASE_PROJECT_ID`, was issued by the **Google** provider, and has a
-  **verified** email. Otherwise 401 `Google sign-in failed`.
-- Accounts are matched by email, so a student who signed up with a password and later uses Google with the same
-  address gets the same account. New Google users are `STUDENT`s, named from their Google profile, with a random
-  password nobody knows (they can set one with "Forgot password").
-- Deactivated accounts get 401. The route shares `authLimiter` (10 per 15 minutes per IP) with login and register.
-- No Turnstile here: the Google popup is the bot check.
+  **verified** email. Otherwise 401 `Google sign-in failed`, and the server logs why (`[google sign-in rejected] ...`,
+  never the token). The usual cause is `FIREBASE_PROJECT_ID` not matching the frontend's project, or pasted with quotes.
+- Accounts are matched by email, so accounts made before sign-in became Google-only (with a password) are reached by
+  signing in with Google on the same address, role and registrations included. New users are `STUDENT`s, named from
+  their Google profile.
+- Deactivated accounts get 401.
+- Google blocks sign-in inside in-app browsers (Instagram, Facebook, LinkedIn, Snapchat, Android WebViews). The sign-in
+  page detects them and tells the student to open the link in Chrome or Safari, with a Copy link button.
 - **Setup:** create a Firebase project (console.firebase.google.com) → Authentication → Sign-in method → enable
   Google → add your domains (and `localhost`) under Authorized domains. Put the project id in `FIREBASE_PROJECT_ID`
   (backend) and the web-app config in `frontend/.env.local` (`VITE_FIREBASE_*`). Verifying ID tokens needs only the
-  project id, not a service-account key. Without `FIREBASE_PROJECT_ID` the endpoint answers **503** and the rest of
-  the API is unaffected.
+  project id, not a service-account key. Without `FIREBASE_PROJECT_ID` the endpoint answers **503**.
 
-### Password reset (`passwordReset.controller.js`, built)
-1. `POST /api/auth/forgot-password { email, turnstileToken }`: if an active account has that email, creates a random
-   32-byte token, stores only its SHA-256 with a 30-minute expiry (replacing older links), and **emails the link** through Brevo
-   (`<FRONTEND_URL>/reset-password?token=...`). Without the Brevo SMTP settings the email is printed in the server
-   terminal instead. The answer is always the
-   same 200 message, so the endpoint can't be used to find out which emails have accounts.
-2. The student opens the link; the website's Reset password page posts `POST /api/auth/reset-password { token, password }`.
-   The token is deleted and the new bcrypt hash saved **in one SQL statement**, so a link works exactly once, even with
-   two clicks at the same moment. Expired, used and replaced links get 400 `This reset link is invalid or has expired`.
-   Same password rules as signup (8 to 72 bytes).
+### Emergency login links (`loginLink.controller.js`, built)
+For when Google or Firebase is down, and for signing in to seeded accounts during local development:
+```bash
+npm run login-link -- admin@example.com    # on Render: the service's Shell tab
+```
+prints `<FRONTEND_URL>/api/auth/link?token=...`. Opening it within **10 minutes** signs that account in (the normal
+session cookie) and goes to `/dashboard`; each use is logged (`[login link used] <email>`). The account must exist and
+be active.
+- Only someone who can run commands on the server can make a link: the token is a JWT signed with `JWT_SECRET`, with
+  audience `login-link`. `requireAuth` refuses any token with an audience, so a link token is never a session by itself.
+- Expired, forged or malformed links, session tokens and deactivated accounts all go to `/login?link=invalid`.
+- The link is valid for its 10 minutes even after use. Treat it like a password and don't share it.
 
-Both routes have their own `passwordResetLimiter` (5 requests per 15 minutes per IP), separate from login.
-
-Set `BREVO_SMTP_USER`, `BREVO_SMTP_PASS` and `EMAIL_FROM` in production: without them the links are only printed in the
-server logs, where anyone who can read the logs could use them. Existing sessions stay valid after a reset (JWTs are stateless); they end when
-they expire (`JWT_EXPIRES_IN`).
+### Student profile (`profile.js`, `profile.controller.js`, built)
+Staff need each student's phone (WhatsApp) number, roll number, branch and year. After the first sign-in the website
+sends the student to `/welcome` to fill them in, and keeps sending them there until they have.
+- `PATCH /api/auth/me` validates each field it is sent: `name` 1 to 100 characters; `phone` an Indian mobile, accepted as
+  `+91 98765 43210`, `098765-43210` and so on and stored as 10 digits; `rollNumber` 3 to 30 letters, digits, spaces,
+  `-` or `/`, uppercased; `branch` 2 to 60 characters; `year` the number 1, 2, 3 or 4. Anything else is 400.
+- `profileComplete` is true when all five are set.
+- **Registering needs a complete profile:** `POST /api/registrations/:eventId` and `POST /api/registrations/book-sub-event`
+  answer 403 `Complete your profile (name, phone, roll number, branch and year) before registering.` otherwise, and a
+  team is refused (400) if any teammate's profile is incomplete, naming them.
 
 ### Using `requireAuth`
 ```js
@@ -341,7 +327,8 @@ go past the new limit become `REFUND_REQUIRED` (see payments). An `EVENT_HEAD` c
 ```
 - `teammateEmails`, if sent, must be a non-empty list (at most 10) of valid, different emails, not including the
   leader's. `teamName` (up to 100 characters) is required with it, and not allowed without it.
-- **Every teammate needs a Swayam account** (each row belongs to a user). Unknown emails get 400 naming them.
+- **Every teammate needs a Swayam account** (they have signed in with Google once) with a complete profile (each row
+  belongs to a user, and staff need everyone's details). Unknown emails and incomplete profiles get 400 naming them.
 - One row is created per member, all sharing a `team_id`. The team takes `1 + teammateEmails.length` seats.
 - Only the leader's row carries the UTR, screenshot and `teammate_emails`; only the leader can submit payment proof.
 - All or nothing: if any member is already registered, or there aren't enough seats for the whole team, no rows are created.
@@ -427,7 +414,7 @@ event is a **pass holder** and pays `priceForPassHolders`; anyone else is **stan
 > **The scanner must be logged in as staff.** `POST /api/registrations/check-in` only works with the `token` cookie of
 > a logged-in `ADMIN` or `EVENT_HEAD` account. Without a session it returns **401**; a `STUDENT` session gets **403**;
 > an `EVENT_HEAD` scanning a ticket for an event they did not create gets **403**. So whatever device scans at the door
-> (a phone browser or a scanner page) must first log in through `POST /api/auth/login` with a staff account, and send
+> (a phone browser or a scanner page) must first sign in with Google as a staff account, and send
 > its requests with `credentials: 'include'`, like the rest of the frontend. Students' tickets alone grant nothing: a
 > QR code is only admitted when a staff session scans it.
 >
@@ -459,7 +446,9 @@ event is a **pass holder** and pays `priceForPassHolders`; anyone else is **stan
 | Method | Path | Who | Returns |
 |---|---|---|---|
 | GET | `/api/events/:id/analytics` | ADMIN, EVENT_HEAD (own events) | `totalSeats, seatsFilled, ticketsSold, awaitingPayment, mainEventAttended, mainEventRevenue, subEventRevenue, totalRevenue, refundRequiredCount, refundedCount, subEvents[]` with each sub-event's `capacity, bookingsCount, verifiedCount, attendedCount, revenue, refundRequiredCount` |
-| GET | `/api/events/:eventId/export` | ADMIN, EVENT_HEAD (own events) | CSV attachment of every registration (one row per person, cancelled ones included): `Student Name, Email, Registration Code, Payment Status, Check-in Time (IST)`. The code is the first 8 characters of the registration id (the dashboard's Ticket ID); the time is `YYYY-MM-DD HH:MM` or `Not Attended`. UTF-8 with a byte-order mark for Excel; cells starting with `= + - @` get a leading `'` |
+| GET | `/api/events/:eventId/registrations` | ADMIN, EVENT_HEAD (own events) | The live Registrations sheet: `event { id, title, capacity, price }`, `registrations[]` (newest first, cancelled ones included) with `code, status, paymentStatus, utrNumber, totalAmountPaid, teamName, isGroupLeader, createdAt, reviewedAt, attendedAt`, the student's `name, email, phone, rollNumber, branch, year` and `sessions` (titles of their confirmed bookings), `bookings[]` (every session booking with the same student fields, `sessionTitle`, `sessionStart`, `groupName`, `isPassHolder`), and `updatedAt`. The dashboard polls it every 15 seconds and builds the Excel file from it in the browser. `Cache-Control: no-store` |
+| GET | `/api/analytics/students` | ADMIN | Every account (newest first) with its student details, `role`, `isActive`, `createdAt` and `events[]` (`eventId, title, date, paymentStatus, attended`) it holds a confirmed seat for |
+| GET | `/api/events/:eventId/export` | ADMIN, EVENT_HEAD (own events) | CSV attachment of every registration (one row per person, cancelled ones included): `Student Name, Email, Phone, Roll Number, Branch, Year, Registration Code, Payment Status, Check-in Time (IST)`. The code is the first 8 characters of the registration id (the dashboard's Ticket ID); the time is `YYYY-MM-DD HH:MM` or `Not Attended`. UTF-8 with a byte-order mark for Excel; cells starting with `= + - @` get a leading `'` |
 | GET | `/api/analytics/overview` | ADMIN | `totalEvents, totalUsers, totalRevenue, totalTicketsSold, totalSubEventBookings, pendingPayments, refundsDue` |
 
 Revenue is the sum of `totalAmountPaid` on `VERIFIED` payments (refund-due and refunded money is excluded). Payments
@@ -536,9 +525,8 @@ use unguessable URLs. Where to host them is still to decide.
 - **Uploads:** with `CLOUDINARY_URL` set, `POST /api/uploads/upi-qr` and `/banner` store the image in Cloudinary
   (`swayam/upi-qr/<uuid>`, `swayam/banner/<uuid>`) and returns its https URL; otherwise it saves to `UPLOAD_DIR` as before. A replaced or
   deleted event's image is removed once no event uses it.
-- **Emails (Brevo SMTP):** `smtp-relay.brevo.com:587` (STARTTLS) through nodemailer, with `BREVO_SMTP_USER`,
-  `BREVO_SMTP_PASS` and `EMAIL_FROM`. Password reset links, and a "ticket ready" email to every member when staff approve
-  a payment (registrations and session bookings). Without the Brevo login, emails are printed in the terminal. Sending never delays or fails the request. Test addresses (`.invalid`, `.test`, `.example`) are skipped.
+- **No email:** the API sends none. Students see approvals and rejections on their dashboard (from
+  `/api/registrations/me` and `/bookings/me`), and save their ticket as a PNG from the ticket page.
 - **Editing events:** `PATCH /api/events/:id`, the same body as creating (ADMIN, or the EVENT_HEAD who created it).
 - **Refunds:** `GET /api/payments/refunds` lists REFUND_REQUIRED payments (solo or team leader) for registrations and
   bookings, scoped like the pending list. Mark one done with the existing `PATCH .../refund` endpoints.
@@ -581,7 +569,7 @@ use unguessable URLs. Where to host them is still to decide.
 
 ## 5. Live tests
 
-Four end-to-end suites (301 checks) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
+Four end-to-end suites (316 checks) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
 Run them before every deployment:
 ```bash
 cd backend
@@ -591,12 +579,13 @@ npm run test:live
   main tickets, re-registering, reject-remaining, and race conditions.
 - `sub-events.mjs`: sub-events and pass-holder pricing, bookings and their payments, master tickets, check-in at the
   main gate and sub-events, analytics, refunds, sub-event reject-remaining and capacity editing, and race conditions.
-- `auth-extras.mjs`: signup name, forgot and reset password (single use, expiry, replaced links, rate limit, no
-  account enumeration), Google sign-in guards (not configured, missing and forged tokens), and seat availability.
-  The real Google popup can only be tested by hand with a Firebase project.
+- `auth-extras.mjs`: profile name and student details (validation, phone normalising, partial updates), the removed
+  password endpoints (404), emergency login links (cookie, redirect, expiry, forgery, audience, deactivated accounts,
+  rate limit), Google sign-in guards (not configured, missing and forged tokens), seat availability, and the
+  complete-profile rule for registering. The real Google popup can only be tested by hand with a Firebase project.
 - `teams-venues.mjs`: venues, UPI QR and banner uploads, event schedules, UPI ID and payee name, team registration
   rules, deleting events and sessions, team-competition sessions and auto-grouping, the check-in log, refunds, editing
-  events, and the attendee CSV export.
+  events, the attendee CSV export, the registrations data and All students.
 
 Each prints PASS/FAIL per check and exits with code 1 if anything fails. They create temporary users and events (emails
 ending in `@example.invalid`, titles starting `FINAL TEST`, `SUB TEST` or `AUTH TEST`) and delete them at the end, even when a check
@@ -604,10 +593,12 @@ fails. If a run is killed midway, delete those rows by hand.
 
 **Which database:** `TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`; the first line printed shows the host. Prefer a
 Neon branch of production (Neon console → Branches → create, copy its connection string) so test rows never appear in
-the real database, even briefly. Needs `JWT_SECRET` and `QR_SECRET` from `.env`. `auth-extras.mjs` calls Cloudflare Turnstile; the suites always use the test secret (`1x0000000000000000000000000000000AA`), whatever `.env` holds.
+the real database, even briefly. Needs `JWT_SECRET` and `QR_SECRET` from `.env`. Test users are created with complete
+profiles (`PROFILE` in `helpers.mjs`) so they can register.
 
 ## 6. Security checklist
 helmet headers, CORS allow-list with `credentials: true`, JSON body limit 100 kB, httpOnly + `secure` +
-`sameSite` cookie, JWT pinned to HS256, user re-checked in the database on every request, bcrypt cost 12, parameterised
-queries (Drizzle never concatenates values into SQL), 500 errors never reveal internals, rate limit and Turnstile CAPTCHA on register and login. Still to add:
+`sameSite` cookie, JWT pinned to HS256, user re-checked in the database on every request, no passwords stored (Google
+sign-in only), login-link tokens kept apart from sessions by their audience, parameterised queries (Drizzle never
+concatenates values into SQL), 500 errors never reveal internals, rate limit on sign-in. Still to add:
 request validation library (e.g. Zod) for the other modules, and a CSRF token if the frontend and API are served from different sites.

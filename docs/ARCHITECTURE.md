@@ -26,8 +26,8 @@ Paths starting with `src/` in the frontend sections below refer to `frontend/src
 ## Frontend
 
 ### Stack
-React 18, Vite 5, React Router 6, qrcode.react (ticket QR codes), html5-qrcode (door-scanner camera), Firebase Web SDK (Google sign-in only, loaded on
-click), Cloudflare Turnstile (CAPTCHA on login, signup and forgot password). Plain CSS, no framework: one
+React 18, Vite 5, React Router 6, qrcode.react (ticket QR codes), html5-qrcode (door-scanner camera), Firebase Web SDK (Google sign-in, the only
+way to sign in, loaded on click), write-excel-file (staff .xlsx downloads, loaded on click). Plain CSS, no framework: one
 `src/index.css` with design tokens and component classes, and no inline styles apart from computed values (seat-bar
 width). Design: `docs/DESIGN_SYSTEM.md`; the reference mock-up is `docs/design/swayam-ecell-design.html`.
 
@@ -47,26 +47,30 @@ Upcoming / Ongoing / Past tabs treat them the same. A live event counts as "ongo
 | `src/main.jsx`, `src/App.jsx` | Entry; routes, protected routes, scroll handling, site shell |
 | `src/index.css` | Design tokens and every style, in numbered sections |
 | `src/api/client.js` | `api()`: every backend call (cookie included; errors become `ApiError` with the server's message) |
-| `src/context/auth.jsx` | Signed-in user from `GET /api/auth/me`; login, signup, Google, logout, name update |
+| `src/context/auth.jsx` | Signed-in user from `GET /api/auth/me`; Google sign-in, logout, profile update |
 | `src/lib/events.js` | Archive + live event model, phases, filters, date and price formatting |
 | `src/lib/firebase.js` | Google popup → Firebase ID token |
+| `src/lib/profile.js`, `ticketImage.js`, `sheet.js` | Student-detail rules (same as the API), the PNG ticket, and the staff spreadsheets (sorting, Excel download, copying phone numbers) |
 | `src/hooks/` | `useLiveEvents` (shared, cached live events with seats), `useMyRegistrations` (plus plain-language status) |
 | `src/data/` | Static content: `events.js` (archive) and `site.js` (club and contact, team, wings, Vision in Action stages, voices; `sponsors` and `faq` stay hidden while empty) |
-| `src/components/` | Navbar, Footer, Spotlight (cursor light), EventRow, EventFrame, RegisterModal (solo or team registration), PaymentForm (manual UPI proof, shared by registrations and bookings), SubEvents (session list and booking), QrTicket, Turnstile, GoogleButton, and `ui.jsx` (Modal, Pill, SeatBar, Alert, Empty, Crumbs) |
-| `src/pages/` | Home, Events, EventDetail, About, DepartmentDetail, Auth (Login, Signup), ForgotPassword, ResetPassword, Dashboard (picks the student, event-head or admin dashboard from `pages/dashboard/`), Ticket, Profile, Scanner (door scanner, loaded only when opened), NotFound |
+| `src/components/` | Navbar, Footer, Spotlight (cursor light), EventRow, EventFrame, RegisterModal (solo or team registration), PaymentForm (manual UPI proof, shared by registrations and bookings), SubEvents (session list and booking), QrTicket, ProfileForm, GoogleButton, and `ui.jsx` (Modal, Pill, SeatBar, Alert, Empty, Crumbs) |
+| `src/pages/` | Home, Events, EventDetail, About, DepartmentDetail, Auth (sign in), Welcome (student details after the first sign-in), Dashboard (picks the student, event-head or admin dashboard from `pages/dashboard/`, which also holds the Registrations sheet and All students), Ticket, Profile, Scanner (door scanner, loaded only when opened), NotFound |
 | `scripts/` | Checks: `npm run check:data` (event data integrity, search) and `npm run check:render` (renders every route) |
 
 ### Routes
 `/`, `/events` (shows upcoming), `/events/upcoming`, `/events/ongoing`, `/events/past`, `/events/:id`, `/about`,
-`/teams/:departmentId`, `/login`, `/signup`, `/forgot-password`, `/reset-password?token=…`, and for signed-in users:
-`/dashboard` (role-based dashboard; staff open one event with `?event=<id>&tab=overview|payments|sessions`, and their own tickets with `?view=tickets`), `/tickets/:eventId` (master QR code), `/profile`, and for `ADMIN` / `EVENT_HEAD` only:
-`/admin/scan` (door scanner; other roles see a "no access" page). Anything else shows the 404 page.
-Protected pages wait for the session check, then send logged-out visitors to `/login` and back afterwards.
+`/teams/:departmentId`, `/login` (old `/signup`, `/forgot-password` and `/reset-password` links redirect there), and
+for signed-in users: `/welcome` (student details), `/dashboard` (role-based dashboard; staff open one event with
+`?event=<id>&tab=overview|registrations|payments|sessions|analytics`, admins all students with `?view=students`,
+refunds with `?view=refunds`, and their own tickets with `?view=tickets`), `/tickets/:eventId` (master QR code), `/profile`, and for `ADMIN` /
+`EVENT_HEAD` only: `/admin/scan` (door scanner; other roles see a "no access" page). Anything else shows the 404 page.
+Protected pages wait for the session check, then send logged-out visitors to `/login` and back afterwards. A signed-in
+user without complete student details is sent to `/welcome` from every page, then back.
 
 ### Development setup
 Run `npm run dev` in `frontend/` with the backend running on port 4000. Vite proxies `/api` to it, so the site and
 the API share an origin and the httpOnly cookie works without CORS. Settings go in `frontend/.env.local` (see
-`frontend/.env.example`): `VITE_API_URL` for production, the Turnstile site key, and the Firebase web config.
+`frontend/.env.example`): `VITE_API_URL` for production and the Firebase web config.
 In production, serve the site and the API from the same site (for example `swayam.example` and
 `api.swayam.example`, which works with `sameSite: 'lax'`), or add a CSRF token if they are on different sites.
 
@@ -75,7 +79,7 @@ In production, serve the site and the API from the same site (for example `swaya
 ### Folder structure
 ```
 backend/
-├── package.json            scripts: dev, start, db:generate, db:migrate, db:baseline, db:studio, db:seed, test:live
+├── package.json            scripts: dev, start, db:generate, db:migrate, db:baseline, db:studio, db:seed, login-link, test:live
 ├── drizzle/                SQL migrations (0000_init.sql, ...) and their snapshots
 ├── drizzle.config.js       points drizzle-kit at src/db/schema.js and DATABASE_URL
 ├── .env.example            copy to .env (never commit .env)
@@ -87,16 +91,17 @@ backend/
     │   ├── schema.js       all tables and enums
     │   └── fragments.js    helpers for raw SQL: "can this user manage this event", snake_case → camelCase rows
     ├── utils/
-    │   ├── verifyTurnstile.js  Cloudflare Turnstile CAPTCHA check
+    │   ├── frontendUrl.js      the site's address, for login links
     │   ├── generateTicket.js   signed QR ticket payloads (generateTicket, verifyTicket)
     │   └── isUuid.js, isHttpsUrl.js  input checks
     ├── middleware/
     │   ├── requireAuth.js  JWT cookie → req.user (built)
-    │   ├── rateLimiter.js  authLimiter: 10 requests / 15 min / IP on register and login (built)
+    │   ├── rateLimiter.js  authLimiter: 10 requests / 15 min / IP on Google sign-in and login links (built)
     │   └── requireRole.js  role checks, e.g. requireRole(['ADMIN']) (built)
     └── modules/            one folder per feature
-        ├── auth/           register, login, logout, me
-        ├── events/         events (create, list, get, capacity) and subEvents.controller.js (sub-events, analytics)
+        ├── auth/           Google sign-in, emergency login links, logout, me, student profile (profile.js)
+        ├── events/         events (create, list, get, capacity), subEvents.controller.js (sub-events, analytics),
+        │                   registrationsList.controller.js (live registrations, all students), CSV export
         ├── registrations/  registrations, bookings.controller.js (sub-event bookings), checkin.controller.js
         │                   (QR scanning), team.js (team and amount input shared by registrations and bookings)
         ├── payments/       UPI proof, staff queue, approve/reject with refund overflow, refunds, reject remaining,
@@ -109,22 +114,24 @@ A module's router is mounted in `app.js`, for example `app.use('/api/auth', auth
 Everything in the tree is built. Endpoints, bodies and error codes: `docs/BACKEND.md`.
 
 ### Roles
-`STUDENT` (default for every signup), `EVENT_HEAD` (creates events; manages capacity, sub-events, payments, refunds,
+`STUDENT` (default for every new account), `EVENT_HEAD` (creates events; manages capacity, sub-events, payments, refunds,
 check-in and analytics only for events they created), `ADMIN` (everything, plus the club-wide overview). The role is stored in the `users` table and read from the database on every request,
 never from the token, so a role change or suspension takes effect immediately.
 
 ## Authentication: JWT in an httpOnly cookie
-The API issues and checks its own tokens. "Sign in with Google" uses Firebase only to verify the Google account; the API then issues the same cookie (see `docs/BACKEND.md`).
+The API issues and checks its own tokens. Sign-in is Google only: Firebase is used only to verify the Google account,
+and there are no passwords (see `docs/BACKEND.md`, which also covers the emergency login links).
 
-1. **Signup** `POST /api/auth/register { email, password, turnstileToken }`: the password is hashed with bcrypt (`bcryptjs`) and stored as
-   `users.password_hash`. The plain password is never stored or logged.
-2. **Login** `POST /api/auth/login { email, password, turnstileToken }`: the API compares the password with the hash. On success it signs a JWT
+1. **First sign-in** creates the account (a `STUDENT`, named from Google); the site then asks for phone, roll number,
+   branch and year on `/welcome`.
+2. **Sign in** `POST /api/auth/google-login { idToken }`: the API verifies the Firebase ID token, then signs a JWT
    `{ sub: <user id> }` with `JWT_SECRET` (HS256, lifetime `JWT_EXPIRES_IN`) and sets it as a cookie:
    `token`, `httpOnly`, `secure` in production, `sameSite: 'lax'` (or `'none'` if frontend and API are on different
    sites), `path: '/'`. The token is never in the response body, so frontend JavaScript cannot read or leak it.
 3. **Every request** the browser sends the cookie automatically (the frontend must use `credentials: 'include'`).
    `requireAuth` verifies the signature and expiry, loads the user from the database, rejects missing or deactivated
-   users with 401, and sets `req.user` (`id, email, role, isActive, createdAt`, never the hash).
+   users with 401, and sets `req.user` (`id, email, name`, the student details, `role, isActive, createdAt` and
+   `profileComplete`).
 4. **Logout** `POST /api/auth/logout`: clears the cookie.
 
 Because the browser sends cookies on its own, state-changing routes rely on `sameSite` plus the CORS allow-list

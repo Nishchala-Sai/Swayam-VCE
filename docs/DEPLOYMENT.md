@@ -1,7 +1,7 @@
 # Deployment
 
 The API runs on **Render** (a Node web service), the site on **Vercel**, the database on **Neon**, images on
-**Cloudinary** and email through **Brevo**.
+**Cloudinary**, and sign-in through **Firebase** (Google only). The site sends no email.
 
 ```
 browser ──> https://<site>.vercel.app ──┬── static site (frontend/dist)
@@ -17,12 +17,9 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
   database nothing is needed: the first deploy creates every table.
 - **Cloudinary:** an account. Copy the `CLOUDINARY_URL` (Dashboard > API environment variable). Render's disk is wiped
   on every deploy, so uploads must go to Cloudinary in production.
-- **Brevo:** an account with a **verified sender** or, better, a verified domain (Senders, domains & dedicated IPs; add
-  the SPF and DKIM records it gives you). Then SMTP & API > SMTP: note the login and create an SMTP key.
-- **Cloudflare Turnstile:** a production widget (site key + secret key). Add your Vercel domain (and any custom domain)
-  to its hostnames.
-- **Firebase** (Google sign-in, optional): a project with Google enabled under Authentication > Sign-in method. Add the
-  Vercel domain under Authentication > Settings > Authorized domains.
+- **Firebase** (Google sign-in, **required**: it is the only way to sign in): a project with Google enabled under
+  Authentication > Sign-in method. Add the Vercel domain (and any custom domain) under Authentication > Settings >
+  Authorized domains.
 
 ## 2. Backend on Render
 
@@ -52,19 +49,20 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
    | `JWT_SECRET` | 48+ random bytes: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
    | `JWT_EXPIRES_IN` | `7d` |
    | `QR_SECRET` | Different random value. **If you keep the current database, reuse the current `QR_SECRET`**, or every ticket already issued stops scanning |
-   | `TURNSTILE_SECRET` | Production Turnstile secret key |
-   | `FIREBASE_PROJECT_ID` | Firebase project id (omit to turn Google sign-in off) |
+   | `FIREBASE_PROJECT_ID` | Firebase project id, exactly as `VITE_FIREBASE_PROJECT_ID` on Vercel, without quotes |
    | `CLOUDINARY_URL` | `cloudinary://<key>:<secret>@<cloud>` |
-   | `BREVO_SMTP_USER` | Brevo SMTP login |
-   | `BREVO_SMTP_PASS` | Brevo SMTP key |
-   | `EMAIL_FROM` | `Swayam E-Cell <noreply@your-verified-domain>` |
-   | `FRONTEND_URL` | `https://<site>.vercel.app` (or the custom domain), no trailing slash. Used in email links |
+   | `FRONTEND_URL` | `https://<site>.vercel.app` (or the custom domain), no trailing slash. Used in login links |
    | `CORS_ORIGIN` | Same as `FRONTEND_URL` (comma separate several) |
    | `TRUST_PROXY` | `2`: requests pass through Vercel's proxy and then Render's. Rate limits key on the client IP and are wrong with any other value |
 
-   Don't set `PORT` (Render sets it) or `UPLOAD_DIR` (Cloudinary is used).
+   Don't set `PORT` (Render sets it) or `UPLOAD_DIR` (Cloudinary is used). Paste values without quotes: Render keeps
+   them as part of the value. `TURNSTILE_SECRET`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS` and `EMAIL_FROM` are no longer
+   used; delete them if they are set.
 4. **Create Web Service**. When the deploy is live, open `https://swayam-vce.onrender.com/health`: it must answer
-   `{"success":true,"data":{"status":"ok"}}`. The log shows `migrations applied successfully!` before the server starts.
+   `{"success":true,"data":{"status":"ok"}}`. The log shows `Migrations up to date (N applied).` before the server starts.
+
+**If Google sign-in is down** (or `FIREBASE_PROJECT_ID` is wrong) and you need to get in: Render > the service >
+**Shell**, run `npm run login-link -- your@gmail.com`, and open the printed link within 10 minutes.
 
 ## 3. Frontend on Vercel
 
@@ -85,43 +83,47 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
    | Key | Value |
    |---|---|
    | `VITE_API_URL` | Leave unset: the site calls `/api` on its own domain and Vercel proxies it |
-   | `VITE_TURNSTILE_SITE_KEY` | Production Turnstile site key |
-   | `VITE_FIREBASE_API_KEY` | Firebase web app config (Project settings > Your apps). Leave the four empty to hide the Google button |
+   | `VITE_FIREBASE_API_KEY` | Firebase web app config (Project settings > Your apps). Required: Google is the only way to sign in |
    | `VITE_FIREBASE_AUTH_DOMAIN` | `<project>.firebaseapp.com` |
    | `VITE_FIREBASE_PROJECT_ID` | Same project as the backend's `FIREBASE_PROJECT_ID` |
    | `VITE_FIREBASE_APP_ID` | From the same config |
-5. **Deploy**. Changing a `VITE_` variable later needs a redeploy, because it is baked in at build time.
-6. With a custom domain: add it in Vercel > Domains, then update `FRONTEND_URL` and `CORS_ORIGIN` on Render, the
-   Turnstile hostnames and the Firebase authorized domains.
+5. **Deploy**. Changing a `VITE_` variable later needs a redeploy, because it is baked in at build time. Delete
+   `VITE_TURNSTILE_SITE_KEY` if it is set; it is no longer used.
+6. With a custom domain: add it in Vercel > Domains, then update `FRONTEND_URL` and `CORS_ORIGIN` on Render and the
+   Firebase authorized domains.
 
 ## 4. Go-live checklist
 
 Accounts and data:
-- [ ] Sign up with the real admin's email on the live site, then set its `role` to `ADMIN` (`npm run db:studio` with
+- [ ] Sign in with Google as the real admin on the live site, then set its `role` to `ADMIN` (`npm run db:studio` with
       production's `DATABASE_URL`, or the Neon SQL editor).
-- [ ] Deactivate every seeded test account (public password `Password123!`, one of them an ADMIN):
+- [ ] Deactivate every seeded test account:
       `update users set is_active = false where email like '%@swayam.com';`
-      (deactivate rather than delete: their rows are referenced by events and registrations).
+      (deactivate rather than delete: their rows are referenced by events and registrations). Done on the current
+      database.
 - [ ] Delete or edit the test events, and give each real paid event its UPI QR, UPI ID and payee name.
 
 Smoke test on the live URL (use a phone for the scanner and payment steps):
 - [ ] `/health` on Render answers ok; the home page, events, an archive event and a wing page load; refreshing a deep
       link such as `/events/upcoming` works.
-- [ ] Sign up (Turnstile shows and passes), log out, log in. The `token` cookie is on the Vercel domain, `Secure`,
-      `HttpOnly`.
-- [ ] Sign in with Google (if configured).
-- [ ] Forgot password: the email arrives from `EMAIL_FROM` (check spam), the link opens the live site, the new password
-      works, the link fails the second time.
+- [ ] Sign in with Google with a new Gmail: you land on `/welcome`, and after saving the details, on the dashboard.
+      Sign out and in again: no `/welcome` this time. The `token` cookie is on the Vercel domain, `Secure`, `HttpOnly`.
+- [ ] Open the site from an Instagram or LinkedIn message: the sign-in page asks you to open it in Chrome or Safari.
 - [ ] As an event head: create a paid event with a banner, UPI QR, UPI ID and payee name. The banner and QR URLs start
       with `https://res.cloudinary.com/`. The event page shows the banner and the UPI ID.
 - [ ] As a student: register, pay a small real amount (₹1 event) to the event's UPI ID, submit the UTR.
-- [ ] As the event head: approve it. The student gets the "ticket ready" email and sees the QR ticket.
-- [ ] Door scanner (`/admin/scan`) on a phone: the ticket checks in once; a second scan says already checked in.
-- [ ] Analytics tab: revenue and check-in appear. **Download CSV** opens in Excel with the student marked as checked in.
+- [ ] As the event head: the registration appears in the event's **Registrations** tab within 15 seconds, with the
+      student's phone, roll number, branch and year. Approve the payment.
+- [ ] As the student: the dashboard shows "Payment approved", the ticket opens, and **Download ticket** saves a PNG.
+- [ ] Door scanner (`/admin/scan`) on a phone: scan the saved PNG with the phone offline; it checks in once, and a
+      second scan says already checked in.
+- [ ] Registrations tab: **Download Excel** opens in Excel with phone numbers intact and India times; **Copy phone
+      numbers** pastes a list of `+91...` numbers. Analytics shows revenue and the check-in.
+- [ ] Admin: **All students** lists the student with the event.
 - [ ] A free event: register and get the ticket straight away.
 - [ ] A session (sub-event) booking and its payment, if you use them.
-- [ ] Rate limit: request a password reset 6 times from one device (the limit is 5 per 15 minutes): the 6th is refused,
-      while another device on mobile data can still request one. If both are blocked, `TRUST_PROXY` is too low.
+- [ ] Emergency access: on Render's Shell run `npm run login-link -- <admin email>` and open the link in a private
+      window: it signs you in.
 - [ ] Redeploy once on Render and confirm uploaded images and data are still there.
 
 Afterwards:
