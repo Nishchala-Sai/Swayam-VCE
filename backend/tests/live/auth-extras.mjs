@@ -48,13 +48,13 @@ try {
   const bad = [
     [{ phone: '12345' }, 'short phone'], [{ phone: '5876543210' }, 'phone not starting 6-9'], [{ phone: '98765432100' }, '11-digit phone'],
     [{ rollNumber: 'x' }, 'roll number under 3 characters'], [{ rollNumber: '<script>' }, 'roll number with symbols'],
-    [{ branch: 'C' }, 'one-letter branch'], [{ year: 5 }, 'year 5'], [{ year: '2' }, 'year as text'], [{}, 'empty body'],
+    [{ branch: 'C' }, 'one-letter branch'], [{ branch: 'Biotech' }, 'branch not offered by the college'], [{ year: 5 }, 'year 5'], [{ year: '2' }, 'year as text'], [{}, 'empty body'],
   ]
   for (const [body, label] of bad) {
     r = await call('PATCH', '/auth/me', body, { cookie: cookieA }); check(`${label} -> 400`, r.code === 400, r)
   }
-  r = await call('PATCH', '/auth/me', { phone: '+91 98765-43210', rollNumber: ' 1602-23-733-042 ', branch: ' CSE  (AI & ML) ', year: 3 }, { cookie: cookieA })
-  check('save profile: phone normalised to 10 digits, text trimmed, complete', r.code === 200 && r.body.data.phone === '9876543210' && r.body.data.rollNumber === '1602-23-733-042' && r.body.data.branch === 'CSE (AI & ML)' && r.body.data.year === 3 && r.body.data.profileComplete === true, r)
+  r = await call('PATCH', '/auth/me', { phone: '+91 98765-43210', rollNumber: ' 1602-23-733-042 ', branch: ' cse  (aiml) ', year: 3 }, { cookie: cookieA })
+  check('save profile: phone normalised to 10 digits, text trimmed, branch in its listed spelling, complete', r.code === 200 && r.body.data.phone === '9876543210' && r.body.data.rollNumber === '1602-23-733-042' && r.body.data.branch === 'CSE (AIML)' && r.body.data.year === 3 && r.body.data.profileComplete === true, r)
   r = await call('PATCH', '/auth/me', { phone: '09876501234' }, { cookie: cookieA }); check('only the fields sent change', r.code === 200 && r.body.data.phone === '9876501234' && r.body.data.year === 3, r)
 
   console.log('\n== Password sign-in is gone')

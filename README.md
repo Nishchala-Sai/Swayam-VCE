@@ -28,7 +28,7 @@ email: students see payment decisions on their dashboard, and the club reaches p
 | Part | State |
 |---|---|
 | `frontend/` | Complete and connected to the API: home, events (upcoming, ongoing, past archive), event pages with banners, registration and UPI payment, about and the 8 wing pages, Google sign-in, first-sign-in profile form, My tickets with payment updates, QR ticket with PNG download, profile, staff dashboards with the live registrations sheet, door scanner, 404 |
-| `backend/` | Complete: Google sign-in and emergency login links, required student profiles, events with banners and per-event UPI details, seat availability, solo and team registrations, sub-events with pass-holder pricing, manual UPI payments with refund overflow and refunds, master QR tickets and check-in, analytics, registrations data and attendee CSV export. 321 live end-to-end checks |
+| `backend/` | Complete: Google sign-in and emergency login links, required student profiles, events with banners and per-event UPI details, seat availability, solo and team registrations, sub-events with pass-holder pricing, manual UPI payments with refund overflow and refunds, master QR tickets and check-in, analytics, registrations data and attendee CSV export. 322 live end-to-end checks |
 
 ### Sign-in and student details
 
@@ -146,7 +146,7 @@ the go-live checklist: `docs/DEPLOYMENT.md`.
 ## Checks
 
 ```bash
-cd backend && npm run test:live      # 4 end-to-end suites (321 checks; 315 when Cloudinary is set) against Neon; run before every deployment
+cd backend && npm run test:live      # 4 end-to-end suites (322 checks; 316 when Cloudinary is set) against Neon; run before every deployment
 cd frontend && npm run check:data    # event archive integrity and search
 cd frontend && npm run check:render  # every page renders with its content
 cd frontend && npm run build         # production build in frontend/dist

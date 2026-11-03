@@ -17,7 +17,7 @@
   `0002_student_profile`.
 - Environment: `TURNSTILE_SECRET`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS`, `EMAIL_FROM` and `VITE_TURNSTILE_SITE_KEY`
   are no longer used; the server no longer requires `TURNSTILE_SECRET` to start.
-- Live tests: 321 checks in 4 suites (315 when Cloudinary is set, which skips the local-disk upload checks).
+- Live tests: 322 checks in 4 suites (316 when Cloudinary is set, which skips the local-disk upload checks).
 
 ## v3.6 (November 2026): banners, CSV export, per-event UPI, Brevo
 - Event banners: optional image uploaded in the event form (`POST /api/uploads/banner`, Cloudinary, up to 5 MB),
