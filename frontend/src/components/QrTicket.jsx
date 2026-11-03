@@ -20,8 +20,11 @@ export function useMasterTicket(eventId) {
   return state
 }
 
-export default function QrTicket({ eventId }) {
-  const { ticket, error, loading } = useMasterTicket(eventId)
+export const passNote = (ticket) =>
+  ticket.kind === 'MAIN' ? 'Main pass: admits you to the event and the sessions you booked.' : 'Sub-event pass: admits you to the sessions you booked.'
+
+// The code for an already loaded ticket (useMasterTicket's state)
+export function QrCode({ ticket, error, loading }) {
   if (loading) return <Loading>Loading your ticket</Loading>
   if (error) return <Alert tone="info">{error}</Alert>
   return (
@@ -29,9 +32,11 @@ export default function QrTicket({ eventId }) {
       <div className="qr">
         <QRCodeSVG value={ticket.qrPayload} size={220} level="M" title="Your entry QR code" />
       </div>
-      <p className="small muted">
-        {ticket.kind === 'MAIN' ? 'Main pass: admits you to the event and the sessions you booked.' : 'Sub-event pass: admits you to the sessions you booked.'}
-      </p>
+      <p className="small muted">{passNote(ticket)}</p>
     </>
   )
+}
+
+export default function QrTicket({ eventId }) {
+  return <QrCode {...useMasterTicket(eventId)} />
 }

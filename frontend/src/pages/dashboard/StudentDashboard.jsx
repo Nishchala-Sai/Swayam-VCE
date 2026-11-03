@@ -15,6 +15,38 @@ const ONGOING_MS = 12 * 3600e3 // an event stays under "Upcoming" this long afte
 // Solo rows and team leaders submit the UTR; teammates wait for their leader
 const canPay = (r) => r.status === 'CONFIRMED' && r.paymentStatus === 'PENDING' && !r.utrNumber && (!r.teamId || r.isGroupLeader)
 
+// Payment decisions the student hasn't dismissed yet. No emails are sent, so this is where they find out. Dismissed
+// ones are remembered in this browser only; on another device they show once more, which is harmless.
+const SEEN_KEY = 'swayam:seen-updates'
+function readSeen() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) ?? [])
+  } catch {
+    return new Set()
+  }
+}
+function decisionsFor(items, bookings, since) {
+  const out = []
+  for (const r of items) {
+    if (new Date(r.event.date).getTime() < since || !(r.event.price > 0)) continue
+    const title = r.event.title
+    if (r.status === 'CONFIRMED' && r.paymentStatus === 'VERIFIED') {
+      out.push({ key: `${r.id}:VERIFIED`, tone: 'ok', text: `Payment approved for ${title}. Your ticket is ready.`, to: `/tickets/${r.event.id}`, action: 'View ticket' })
+    } else if (r.status === 'CANCELLED' && r.paymentStatus === 'REJECTED') {
+      out.push({ key: `${r.id}:REJECTED`, tone: 'error', text: `Your payment for ${title} could not be verified, so the registration was cancelled. You can register again.`, to: `/events/${r.event.id}`, action: 'Open event' })
+    }
+  }
+  for (const b of bookings) {
+    if (!b.utrNumber || new Date(b.subEvent.startTime ?? b.event.date).getTime() < since) continue
+    if (b.status === 'CONFIRMED' && b.paymentStatus === 'VERIFIED') {
+      out.push({ key: `${b.id}:VERIFIED`, tone: 'ok', text: `Payment approved for ${b.subEvent.title}. Your event ticket now admits you to it.`, to: `/tickets/${b.event.id}`, action: 'View ticket' })
+    } else if (b.status === 'CANCELLED' && b.paymentStatus === 'REJECTED') {
+      out.push({ key: `${b.id}:REJECTED`, tone: 'error', text: `Your payment for ${b.subEvent.title} could not be verified, so the booking was cancelled.`, to: `/events/${b.event.id}`, action: 'Open event' })
+    }
+  }
+  return out
+}
+
 export default function StudentDashboard() {
   const { items, loading, error, reload } = useMyRegistrations()
   const { live, reload: reloadLive } = useLiveEvents()
@@ -22,6 +54,17 @@ export default function StudentDashboard() {
   const [payingBooking, setPayingBooking] = useState(null)
   const [bookingPaid, setBookingPaid] = useState(false)
   const [bookings, setBookings] = useState([])
+  const [seen, setSeen] = useState(readSeen)
+  const dismiss = (key) =>
+    setSeen((s) => {
+      const next = new Set(s).add(key)
+      try {
+        localStorage.setItem(SEEN_KEY, JSON.stringify([...next].slice(-200)))
+      } catch {
+        // storage unavailable (private mode): dismissed for this visit only
+      }
+      return next
+    })
 
   const loadBookings = () => api('/registrations/bookings/me').then((b) => setBookings(b ?? [])).catch(() => setBookings([]))
   useEffect(() => {
@@ -37,6 +80,7 @@ export default function StudentDashboard() {
     .sort((a, b) => startOf(a) - startOf(b))
   const attended = items.filter((r) => r.attendedAt).sort((a, b) => startOf(b) - startOf(a))
   const closed = items.filter((r) => r.status === 'CANCELLED')
+  const updates = decisionsFor(items, bookings, now - ONGOING_MS).filter((u) => !seen.has(u.key))
   // The event behind a session booking being paid for: its UPI QR, ID and payee name
   const payingEvent = payingBooking && live.find((e) => e.key === payingBooking.event.id)?.raw
 
@@ -58,6 +102,20 @@ export default function StudentDashboard() {
 
   return (
     <div className="stack">
+      {updates.length > 0 && (
+        <section aria-label="Payment updates" className="updates">
+          {updates.map((u) => (
+            <div key={u.key} className={`alert alert--${u.tone} update`} role="status">
+              <span>{u.text}</span>
+              <span className="actions mt-0">
+                <Link className="btn btn--sm" to={u.to}>{u.action}</Link>
+                <button className="btn btn--sm btn--ghost" onClick={() => dismiss(u.key)}>Dismiss</button>
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+
       {(toPay.length > 0 || bookingsToPay.length > 0) && (
         <section aria-labelledby="pay-title">
           <h2 id="pay-title" className="mb-md">Pending payments</h2>
@@ -178,7 +236,7 @@ export default function StudentDashboard() {
           {bookingPaid ? (
             <>
               <h2>Payment submitted</h2>
-              <p>The organisers will verify it. Your master ticket admits you to {payingBooking.subEvent.title} once it is confirmed.</p>
+              <p>The organisers will verify it, usually within a few hours. Your master ticket admits you to {payingBooking.subEvent.title} once it is confirmed. Check back here: we don't send emails.</p>
               <button className="btn" onClick={() => { setPayingBooking(null); setBookingPaid(false) }}>Close</button>
             </>
           ) : (

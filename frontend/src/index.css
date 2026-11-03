@@ -160,6 +160,8 @@ a.card:hover { border-color: #555; }
 .alert--error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .alert--ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 7%, transparent); }
 .alert--info { color: var(--fg); border-color: var(--line-strong); background: var(--surface); }
+.updates { display: grid; gap: 10px; }
+.update { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
 
 .empty { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 40px 28px; text-align: center; }
 .empty h3 { margin-bottom: 8px; }

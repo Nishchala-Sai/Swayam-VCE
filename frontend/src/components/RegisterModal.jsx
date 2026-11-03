@@ -160,7 +160,8 @@ export default function RegisterModal({ event, registrationId: existingId = null
       {step === 'submitted' && (
         <>
           <h2>Payment submitted</h2>
-          <p>Thanks. The organisers will check your payment against their UPI statement. {teamSize > 1 ? 'Every team member' : 'You'} will see the ticket on their dashboard as soon as it is verified.</p>
+          <p>Thanks. The organisers will check your payment against their UPI statement, usually within a few hours. {teamSize > 1 ? 'Every team member' : 'You'} will see the ticket on their dashboard as soon as it is verified.</p>
+          <p className="small muted">We don't send emails, so check your dashboard for the ticket.</p>
           <div className="actions">
             <Link className="btn" to="/dashboard" onClick={onClose}>Go to your dashboard</Link>
             <button className="btn btn--ghost" onClick={onClose}>Close</button>

@@ -218,7 +218,7 @@ function BookModal({ event, sub, passHolder, startAt, existingId, existingAmount
       {step === 'submitted' && (
         <>
           <h2>Payment submitted</h2>
-          <p>The organisers will verify your payment. Once it is confirmed, your event ticket's QR code gets you into {sub.title}.</p>
+          <p>The organisers will verify your payment, usually within a few hours. Once it is confirmed, your event ticket's QR code gets you into {sub.title}. We don't send emails, so check your dashboard.</p>
           <div className="actions">
             <Link className="btn" to="/dashboard" onClick={onClose}>Go to your dashboard</Link>
             <button className="btn btn--ghost" onClick={onClose}>Close</button>
