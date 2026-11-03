@@ -40,7 +40,7 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
    | Health Check Path | `/health` (Advanced) |
    | Instance type | Starter or above for launch. Free instances sleep after 15 idle minutes and take up to a minute to wake, which can time out the first request through Vercel |
 
-   The start command applies any pending migrations (`drizzle-kit migrate`, a no-op when there are none), then starts
+   The start command applies any pending migrations (`scripts/migrate.js`, a no-op when there are none), then starts
    the API. If a migration fails the server does not start and the previous deploy keeps serving.
 3. **Environment variables** (Environment tab):
 

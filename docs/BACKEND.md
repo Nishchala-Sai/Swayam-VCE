@@ -46,7 +46,7 @@ shared database. A branch has its own connection string; put it in your `.env`.
 | `npm run dev` | Start with auto-restart (`node --watch`) |
 | `npm start` | Start for production |
 | `npm run db:generate` | After editing `src/db/schema.js`: write a new SQL migration to `drizzle/` (add `-- --name what_changed`) |
-| `npm run db:migrate` | Apply every migration in `drizzle/` the database hasn't had yet (`drizzle-kit migrate`). Safe to run repeatedly; production runs it on every start |
+| `npm run db:migrate` | Apply every migration in `drizzle/` the database hasn't had yet (`scripts/migrate.js`, which uses Drizzle's migrator but prints the real Postgres error, unlike `drizzle-kit migrate`). Safe to run repeatedly; production runs it on every start |
 | `npm run db:baseline` | One-off: mark `0000_init` as applied on a database created earlier with `db:push`. Checks every table and column exists first |
 | `npm run db:studio` | Open Drizzle Studio, a browser UI for viewing and editing rows |
 | `npm run db:seed` | Create or reset the three test accounts (see `users` below) |
@@ -65,7 +65,7 @@ they are `camelCase` (`passwordHash`).
 
 Production commands (run from `backend/` with production's `DATABASE_URL`):
 ```bash
-npx drizzle-kit migrate      # same as npm run db:migrate: applies pending migrations, records them in drizzle.__drizzle_migrations
+npm run db:migrate           # applies pending migrations, records them in drizzle.__drizzle_migrations
 npm run db:baseline          # only once, only for a database that was created with db:push (already done for the current Neon database)
 ```
 Never run `drizzle-kit push` against production: it changes tables without a migration record, and the next migration

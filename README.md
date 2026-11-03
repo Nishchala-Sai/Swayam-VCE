@@ -113,7 +113,7 @@ The schema is in `backend/src/db/schema.js` and changes ship as SQL migrations i
 ```bash
 cd backend
 npm run db:generate -- --name what_changed   # after editing schema.js: writes drizzle/NNNN_what_changed.sql
-npm run db:migrate                           # applies pending migrations (npx drizzle-kit migrate)
+npm run db:migrate                           # applies pending migrations (scripts/migrate.js)
 ```
 
 Production runs `npm run db:migrate` on every start (see `docs/DEPLOYMENT.md`). The current Neon database was created
