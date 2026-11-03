@@ -569,7 +569,7 @@ use unguessable URLs. Where to host them is still to decide.
 
 ## 5. Live tests
 
-Four end-to-end suites (316 checks) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
+Four end-to-end suites (321 checks; 315 when Cloudinary is set) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
 Run them before every deployment:
 ```bash
 cd backend
