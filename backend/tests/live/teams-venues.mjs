@@ -290,6 +290,25 @@ try {
   check('not checked in: Not Attended; formula-like name neutralised', lines.some((l) => l.startsWith(`"'=HYPERLINK(""http://x"")","${mail('x2')}"`) && l.endsWith('"PENDING","Not Attended"')), { code: 200, body: { message: csv } })
   check('one row per registration', lines.length === 3)
 
+  console.log('\n== Registrations dashboard data')
+  const regsUrl = `/events/${E.banner}/registrations`
+  r = await call(null, 'GET', regsUrl); check('logged out -> 401', r.code === 401, r)
+  r = await call('a1', 'GET', regsUrl); check('student -> 403', r.code === 403, r)
+  r = await call('head2', 'GET', regsUrl); check("another event head can't see it -> 403", r.code === 403, r)
+  r = await call('admin', 'GET', regsUrl); check('admin sees any event', r.code === 200, r)
+  r = await call('head1', 'GET', regsUrl)
+  const rowX1 = r.body.data?.registrations.find((x) => x.email === mail('x1'))
+  check('own event head: one row per registration, newest first', r.code === 200 && r.body.data.registrations.length === 2 && r.body.data.registrations[0].email === mail('x2'), r)
+  check('rows carry student details, code, payment and check-in', rowX1 && rowX1.phone === PROFILE.phone && rowX1.rollNumber === PROFILE.rollNumber && rowX1.branch === PROFILE.branch && rowX1.year === PROFILE.year
+    && rowX1.code === regX1.id.slice(0, 8).toUpperCase() && rowX1.paymentStatus === 'VERIFIED' && rowX1.attendedAt && Array.isArray(rowX1.sessions), r)
+  check('includes session bookings and a timestamp', Array.isArray(r.body.data?.bookings) && !Number.isNaN(Date.parse(r.body.data.updatedAt)), r)
+
+  console.log('\n== All students (admin)')
+  r = await call('head1', 'GET', '/analytics/students'); check('event head -> 403', r.code === 403, r)
+  r = await call('admin', 'GET', '/analytics/students')
+  const studentX1 = r.body.data?.find((s) => s.email === mail('x1'))
+  check('admin: every account with details and the events it holds a seat for', r.code === 200 && studentX1?.phone === PROFILE.phone && studentX1.events.some((e) => e.eventId === E.banner && e.attended === true), r)
+
   if (!process.env.CLOUDINARY_URL) {
     const origin = server.api.replace(/\/api$/, '')
     check('banner image is served', (await fetch(origin + bannerPath)).status === 200)

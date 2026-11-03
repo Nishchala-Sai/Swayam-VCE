@@ -6,7 +6,8 @@ import { Alert, Crumbs } from '../components/ui'
 import { useAuth } from '../context/auth'
 import { useLiveEvents } from '../hooks/useLiveEvents'
 import { fmtDateTime, fromLive } from '../lib/events'
-import { saveBlob, ticketPng } from '../lib/ticketImage'
+import { saveBlob } from '../lib/sheet'
+import { ticketPng } from '../lib/ticketImage'
 
 // /tickets/:eventId — the student's master QR code for one event, which they can save as an image
 export default function Ticket() {

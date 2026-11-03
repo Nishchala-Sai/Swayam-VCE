@@ -6,6 +6,7 @@ import { createSubEvent, updateSubEvent, deleteSubEvent, listSubEvents, updateSu
 import { getAvailability } from './availability.controller.js'
 import { autoGroup, listTeams } from './teams.controller.js'
 import { exportAttendees } from './export.controller.js'
+import { listRegistrations } from './registrationsList.controller.js'
 
 const router = Router()
 
@@ -16,6 +17,7 @@ router.post('/', ...staff, createEvent)
 router.patch('/:id/capacity', ...staff, updateCapacity)
 router.get('/:id/analytics', ...staff, getEventAnalytics)
 router.get('/:eventId/export', ...staff, exportAttendees)
+router.get('/:eventId/registrations', ...staff, listRegistrations)
 router.post('/:eventId/sub-events', ...staff, createSubEvent)
 router.get('/:eventId/sub-events', listSubEvents)
 router.patch('/:eventId/sub-events/:subEventId/capacity', ...staff, updateSubEventCapacity)

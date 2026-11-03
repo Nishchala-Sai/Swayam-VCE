@@ -10,6 +10,7 @@ import { dayOf, inr, monthOf, rupees } from '../../lib/events'
 import EventForm from './EventForm'
 import ManageEvent, { Stat, TABS } from './ManageEvent'
 import { usePendingPayments } from './PendingPayments'
+import Students from './Students'
 import Venues from './Venues'
 
 export default function StaffDashboard({ admin }) {
@@ -41,6 +42,7 @@ export default function StaffDashboard({ admin }) {
   const tab = TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'overview'
   const go = (eventId, nextTab = 'overview') => setParams(eventId ? { event: eventId, tab: nextTab } : {})
 
+  if (admin && params.get('view') === 'students') return <Students onBack={() => setParams({})} />
   if (loading) return <Loading />
   if (error) return <Alert>{error}</Alert>
   if (openId && !open) {
@@ -84,6 +86,7 @@ export default function StaffDashboard({ admin }) {
         </p>
       </div>
       <div className="actions">
+        <button className="btn btn--sm btn--ghost" onClick={() => go(e.key, 'registrations')}>Registrations</button>
         <button className="btn btn--sm btn--ghost" onClick={() => go(e.key, 'payments')}>
           Pending payments{pendingByEvent[e.key] ? <span className="count">{pendingByEvent[e.key]}</span> : null}
         </button>
@@ -95,7 +98,7 @@ export default function StaffDashboard({ admin }) {
 
   return (
     <div className="stack">
-      {admin && <ClubOverview />}
+      {admin && <ClubOverview onStudents={() => setParams({ view: 'students' })} />}
 
       <section aria-labelledby="events-title">
         <div className="sec-head mb-md">
@@ -138,7 +141,7 @@ export default function StaffDashboard({ admin }) {
 }
 
 // Club-wide numbers (ADMIN only): GET /api/analytics/overview
-function ClubOverview() {
+function ClubOverview({ onStudents }) {
   const [o, setO] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -147,7 +150,10 @@ function ClubOverview() {
 
   return (
     <section aria-labelledby="overview-title">
-      <h2 id="overview-title" className="mb-md">Overview</h2>
+      <div className="sec-head mb-md">
+        <h2 id="overview-title">Overview</h2>
+        <button className="btn btn--sm btn--ghost" onClick={onStudents}>All students</button>
+      </div>
       <Alert>{error}</Alert>
       {!o ? !error && <Loading /> : (
         <div className="stats">

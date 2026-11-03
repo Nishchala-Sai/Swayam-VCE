@@ -123,9 +123,3 @@ export async function ticketPng(svg, { title, when, venue, holder, email, code, 
 
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not create the image.'))), 'image/png'))
 }
-
-export function saveBlob(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  Object.assign(document.createElement('a'), { href: url, download: filename }).click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
