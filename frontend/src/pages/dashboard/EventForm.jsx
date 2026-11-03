@@ -1,13 +1,16 @@
 // Create a live (bookable) event: POST /api/events. The venue comes from the admin-managed list, the day-by-day
-// schedule is optional (any times, with breaks), and paid events need an uploaded image of the UPI QR code.
+// schedule is optional (any times, with breaks), paid events need an uploaded image of the UPI QR code, and any event
+// can have a banner image for the top of its page.
 import { useState } from 'react'
 import { api, assetUrl, upload } from '../../api/client'
 import { Alert } from '../../components/ui'
 import VenuePicker from '../../components/VenuePicker'
 
-const EMPTY = { title: '', description: '', date: '', location: '', capacity: '', price: '0', groupSize: '', groupPrice: '', allowTeams: false, maxTeamSize: '4', paymentInstructions: '' }
+const EMPTY = { title: '', description: '', date: '', location: '', capacity: '', price: '0', groupSize: '', groupPrice: '', allowTeams: false, maxTeamSize: '4', upiId: '', upiPayeeName: '', paymentInstructions: '' }
 const MAX_TEAM = 11 // a team leader and up to 10 teammates
 const MAX_QR_BYTES = 2 * 1024 * 1024
+const MAX_BANNER_BYTES = 5 * 1024 * 1024
+const UPI_ID = /^(?=.{3,100}$)[\w.-]+@[a-z][a-z0-9.-]*$/i // handle@bank, as the API checks it
 
 // A new day starts from a typical summit day; every time and title can be changed
 const typicalDay = (date = '') => ({
@@ -35,7 +38,7 @@ function scheduleStart(days) {
   return earliest ? `${first.date}T${earliest}` : ''
 }
 
-function validate(f, days, qr) {
+function validate(f, days, qr, banner) {
   const capacity = Number(f.capacity)
   const price = f.price === '' ? 0 : Number(f.price)
   const start = days.length ? scheduleStart(days) : f.date
@@ -69,6 +72,7 @@ function validate(f, days, qr) {
     if (groupSize != null && groupSize > maxTeamSize) return { error: `The group offer is for ${groupSize} people, so teams must allow at least ${groupSize}.` }
   }
   if (price > 0 && !qr) return { error: 'Paid events need the UPI QR code image. Upload it below.' }
+  if (f.upiId.trim() && !UPI_ID.test(f.upiId.trim())) return { error: 'The UPI ID should look like swayam@okaxis.' }
   return {
     body: {
       title: f.title.trim(),
@@ -80,6 +84,9 @@ function validate(f, days, qr) {
       ...(groupSize != null && { groupSize, groupPrice }),
       ...(maxTeamSize != null && { maxTeamSize }),
       ...(qr && { upiQrUrl: qr }),
+      ...(f.upiId.trim() && { upiId: f.upiId.trim() }),
+      ...(f.upiPayeeName.trim() && { upiPayeeName: f.upiPayeeName.trim() }),
+      ...(banner && { bannerUrl: banner }),
       ...(f.paymentInstructions.trim() && { paymentInstructions: f.paymentInstructions.trim() }),
       ...(days.length && { schedule: days.map((d) => ({ date: d.date, slots: d.slots.map((s) => ({ ...s, title: s.title.trim() })) })) }),
     },
@@ -124,7 +131,7 @@ const toLocalInput = (iso) => {
 
 // The form's starting values: empty for a new event, or the saved event's details when editing
 function initialValues(raw) {
-  if (!raw) return { f: EMPTY, days: [], qr: null }
+  if (!raw) return { f: EMPTY, days: [], qr: null, banner: null }
   return {
     f: {
       title: raw.title,
@@ -137,10 +144,13 @@ function initialValues(raw) {
       groupPrice: raw.groupPrice ? String(raw.groupPrice) : '',
       allowTeams: raw.maxTeamSize != null,
       maxTeamSize: String(raw.maxTeamSize ?? 4),
+      upiId: raw.upiId ?? '',
+      upiPayeeName: raw.upiPayeeName ?? '',
       paymentInstructions: raw.paymentInstructions ?? '',
     },
     days: (raw.schedule ?? []).map((d) => ({ date: d.date, slots: d.slots.map((s) => ({ ...s })) })),
     qr: raw.upiQrUrl ?? null,
+    banner: raw.bannerUrl ?? null,
   }
 }
 
@@ -153,6 +163,8 @@ export default function EventForm({ venues, admin, event = null, onCreated, onSa
   const [days, setDays] = useState(start.days)
   const [qr, setQr] = useState(start.qr) // uploaded path or link
   const [qrState, setQrState] = useState({ busy: false, error: '' })
+  const [banner, setBanner] = useState(start.banner) // uploaded path or link
+  const [bannerState, setBannerState] = useState({ busy: false, error: '' })
   const [state, setState] = useState({ busy: false, error: '' })
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
   const paid = Number(f.price) > 0
@@ -196,25 +208,28 @@ export default function EventForm({ venues, admin, event = null, onCreated, onSa
   // A new day copies the previous day's slots, the usual case for a multi-day summit
   const addDay = () => setDays((ds) => (ds.length ? [...ds, { date: nextDate(ds.at(-1).date), slots: ds.at(-1).slots.map((s) => ({ ...s })) }] : [typicalDay(f.date.slice(0, 10))]))
 
-  async function chooseQr(e) {
+  // Uploads the chosen file to /api/uploads/<kind> and keeps the returned path
+  const chooseImage = (kind, maxBytes, setUrl, setStatus) => async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (file.size > MAX_QR_BYTES) return setQrState({ busy: false, error: 'The image must be 2 MB or smaller.' })
-    setQrState({ busy: true, error: '' })
+    if (file.size > maxBytes) return setStatus({ busy: false, error: `The image must be ${maxBytes / 1024 / 1024} MB or smaller.` })
+    setStatus({ busy: true, error: '' })
     try {
-      const { path } = await upload('/uploads/upi-qr', file)
-      setQr(path)
-      setQrState({ busy: false, error: '' })
+      const { path } = await upload(`/uploads/${kind}`, file)
+      setUrl(path)
+      setStatus({ busy: false, error: '' })
       setState((s) => ({ ...s, error: '' })) // e.g. "Paid events need the UPI QR code image"
     } catch (err) {
-      setQrState({ busy: false, error: err.message })
+      setStatus({ busy: false, error: err.message })
     }
   }
+  const chooseQr = chooseImage('upi-qr', MAX_QR_BYTES, setQr, setQrState)
+  const chooseBanner = chooseImage('banner', MAX_BANNER_BYTES, setBanner, setBannerState)
 
   async function submit(e) {
     e.preventDefault()
-    const { body, error } = validate(f, days, qr)
+    const { body, error } = validate(f, days, qr, banner)
     if (error) return setState({ busy: false, error })
     setState({ busy: true, error: '' })
     try {
@@ -238,6 +253,19 @@ export default function EventForm({ venues, admin, event = null, onCreated, onSa
           <label htmlFor="ev-desc">Description</label>
           <textarea id="ev-desc" rows={4} value={f.description} onChange={set('description')} maxLength={10000} />
           <p className="hint">The first sentence is used as the summary on event cards.</p>
+        </div>
+        <div className="field span-2">
+          <label htmlFor="ev-banner">Banner image (optional)</label>
+          {banner ? (
+            <div className="banner-upload">
+              <img src={assetUrl(banner)} alt="Uploaded event banner" />
+              <button type="button" className="btn btn--sm btn--ghost" onClick={() => setBanner(null)}>Remove</button>
+            </div>
+          ) : (
+            <input id="ev-banner" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseBanner} disabled={bannerState.busy} />
+          )}
+          <p className="hint">{bannerState.busy ? 'Uploading…' : 'PNG, JPEG or WebP, up to 5 MB. Shown across the top of the event page; a wide image (about 3:1) works best.'}</p>
+          {bannerState.error && <p className="hint danger">{bannerState.error}</p>}
         </div>
         <VenuePicker
           id="ev-loc"
@@ -344,6 +372,16 @@ export default function EventForm({ venues, admin, event = null, onCreated, onSa
           <p className="hint">{qrState.busy ? 'Uploading…' : 'PNG, JPEG or WebP, up to 2 MB. Students scan it to pay; paid sessions of this event use it too.'}</p>
           {qrState.error && <p className="hint danger">{qrState.error}</p>}
         </div>
+        <div className="field">
+          <label htmlFor="ev-upi">UPI ID (optional)</label>
+          <input id="ev-upi" value={f.upiId} onChange={set('upiId')} maxLength={100} autoComplete="off" spellCheck={false} placeholder="swayam@okaxis" />
+          <p className="hint">Shown under the QR code, for students who pay by typing the ID.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="ev-payee">Payee name (optional)</label>
+          <input id="ev-payee" value={f.upiPayeeName} onChange={set('upiPayeeName')} maxLength={100} placeholder="Swayam E-Cell" />
+          <p className="hint">The name students should see in their UPI app before paying.</p>
+        </div>
         <div className="field span-2">
           <label htmlFor="ev-instr">Payment instructions (optional)</label>
           <textarea id="ev-instr" rows={2} value={f.paymentInstructions} onChange={set('paymentInstructions')} maxLength={2000} placeholder="Write your roll number in the UPI note." />
@@ -351,7 +389,7 @@ export default function EventForm({ venues, admin, event = null, onCreated, onSa
       </div>
       <Alert>{state.error}</Alert>
       <div className="actions">
-        <button className="btn btn--sm" disabled={state.busy || qrState.busy}>{state.busy ? 'Saving' : editing ? 'Save changes' : 'Create event'}</button>
+        <button className="btn btn--sm" disabled={state.busy || qrState.busy || bannerState.busy}>{state.busy ? 'Saving' : editing ? 'Save changes' : 'Create event'}</button>
         <button type="button" className="btn btn--sm btn--ghost" onClick={onCancel}>Cancel</button>
       </div>
     </form>

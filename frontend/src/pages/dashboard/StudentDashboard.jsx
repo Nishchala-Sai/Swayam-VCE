@@ -37,6 +37,8 @@ export default function StudentDashboard() {
     .sort((a, b) => startOf(a) - startOf(b))
   const attended = items.filter((r) => r.attendedAt).sort((a, b) => startOf(b) - startOf(a))
   const closed = items.filter((r) => r.status === 'CANCELLED')
+  // The event behind a session booking being paid for: its UPI QR, ID and payee name
+  const payingEvent = payingBooking && live.find((e) => e.key === payingBooking.event.id)?.raw
 
   // The pay step needs the event's UPI QR, which comes with the event itself
   function pay(r) {
@@ -184,8 +186,10 @@ export default function StudentDashboard() {
               kind="booking"
               id={payingBooking.id}
               amount={payingBooking.totalAmountPaid}
-              upiQrUrl={live.find((e) => e.key === payingBooking.event.id)?.raw.upiQrUrl}
-              instructions={live.find((e) => e.key === payingBooking.event.id)?.raw.paymentInstructions}
+              upiQrUrl={payingEvent?.upiQrUrl}
+              upiId={payingEvent?.upiId}
+              upiPayeeName={payingEvent?.upiPayeeName}
+              instructions={payingEvent?.paymentInstructions}
               onSubmitted={() => { setBookingPaid(true); loadBookings() }}
             />
           )}

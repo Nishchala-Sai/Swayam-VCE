@@ -1,4 +1,4 @@
-// Password reset by emailed link (Resend). Without RESEND_API_KEY the email is printed in the server terminal instead.
+// Password reset by emailed link (Brevo SMTP). Without the Brevo SMTP login the email is printed in the server terminal.
 //
 // The link carries a random 32-byte token; only its SHA-256 is stored, with a 30-minute expiry. Using a token deletes
 // it in the same statement that changes the password, so each link works once. Requesting a new link deletes the

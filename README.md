@@ -4,8 +4,9 @@ Website and event platform for **Swayam**, the Entrepreneurship Cell of Vasavi C
 Students browse the event archive, register for upcoming events, pay by UPI, and get one QR ticket per event that
 staff scan at the door. Black and amber design.
 
-There is **no admin interface** in the website. Content is edited in code by the engineering team; event management,
-payment verification, check-in and analytics are backend API endpoints used by the team's internal tools.
+Staff manage live events from role-based dashboards on the site: event heads and admins create and edit events
+(with banners and per-event UPI details), approve payments, handle refunds, scan tickets at the door, see analytics
+and download attendee lists as CSV. Archive content (past events, team, wings) is edited in code.
 
 ## Tech stack
 
@@ -14,20 +15,40 @@ payment verification, check-in and analytics are backend API endpoints used by t
 | Layer | Technology |
 |---|---|
 | Frontend | React 18 + Vite 5, React Router 6, plain CSS (one design system file), qrcode.react |
-| Backend | Node.js 20+, Express 5, one API (ES modules) |
+| Backend | Node.js 20+, a single Express 5 API (ES modules) |
 | Database | PostgreSQL on Neon (serverless), accessed with Drizzle ORM |
 | Auth | Custom JWT in an httpOnly cookie, bcrypt; Sign in with Google (Firebase verifies the Google account); password reset links; Cloudflare Turnstile |
-| Payments | Manual UPI: the student pays the club's UPI QR and submits the UTR and amount; staff verify |
+| Images | Cloudinary for uploaded UPI QR codes and event banners (local disk in development); multer |
+| Email | Brevo SMTP through nodemailer: password reset links and "ticket ready" emails |
+| Payments | Manual UPI: the student pays the event's UPI QR or UPI ID and submits the UTR and amount; staff verify |
 
 ## Status
 
 | Part | State |
 |---|---|
-| `frontend/` | Complete and connected to the API: home, events (upcoming, ongoing, past archive), event pages with registration and UPI payment, about and the 8 wing pages, login and signup (with Google), forgot and reset password, My tickets, QR ticket, profile, 404 |
-| `backend/` | Complete: auth (password, Google, reset), events and seat availability, solo and team registrations, sub-events with pass-holder pricing, manual UPI payments with refund overflow and refunds, master QR tickets and check-in, analytics. 154 live end-to-end checks |
+| `frontend/` | Complete and connected to the API: home, events (upcoming, ongoing, past archive), event pages with banners, registration and UPI payment, about and the 8 wing pages, login and signup (with Google), forgot and reset password, My tickets, QR ticket, profile, staff dashboards, door scanner, 404 |
+| `backend/` | Complete: auth (password, Google, emailed password reset), events with banners and per-event UPI details, seat availability, solo and team registrations, sub-events with pass-holder pricing, manual UPI payments with refund overflow and refunds, master QR tickets and check-in, analytics and attendee CSV export. 301 live end-to-end checks |
 
-Before launch: send password-reset links by email (they are printed in the server terminal for now), add a real
-Firebase project for Google sign-in, and use production Turnstile keys. See `docs/BACKEND.md`.
+Password-reset links and "ticket ready" emails are sent through Brevo SMTP; without the Brevo settings they are printed
+in the server terminal instead. Before launch: set the Brevo SMTP login and a verified `EMAIL_FROM`, add a real Firebase
+project for Google sign-in, use production Turnstile keys, and set `CLOUDINARY_URL`. See `docs/BACKEND.md`.
+
+### Event banners
+
+Staff can upload a banner image (PNG, JPEG or WebP, up to 5 MB, ideally about 3:1) when creating or editing an event.
+It is stored in Cloudinary (`POST /api/uploads/banner`) and shown across the top of the event page; events without one
+keep the standard layout.
+
+### Attendee CSV export
+
+The **Download CSV** button in an event's Analytics tab (admins, and event heads for their own events) downloads
+`GET /api/events/:eventId/export`: one row per registered student with name, email, registration code, payment status
+and check-in time (IST), or `Not Attended`.
+
+### UPI details per event
+
+Each event carries its own UPI QR code, UPI ID and payee name, set in the event form. Students see them on the event
+page and in the payment step, so different events can collect money into different accounts.
 
 ## Repository layout
 
@@ -42,6 +63,7 @@ Swayam-VCE/
 ├── backend/                   Express API
 │   ├── .env.example           copy to .env; never commit .env
 │   ├── src/                   server.js, app.js, db/, middleware/, utils/, modules/
+│   ├── scripts/               seed scripts for test accounts and demo data
 │   └── tests/live/            end-to-end suites (npm run test:live)
 └── frontend/
     ├── .env.example           copy to .env.local (API URL, Turnstile and Firebase web settings)
@@ -59,9 +81,6 @@ Swayam-VCE/
         └── pages/             Home, Events, EventDetail, About, DepartmentDetail, Auth, ForgotPassword,
                                ResetPassword, Dashboard, Ticket, Profile, NotFound
 ```
-
-> `backend/services/`, `backend/tests/integration/`, `backend/db/` and `backend/docker-compose.yml` are the old
-> three-service backend. They are not part of the PERN stack and are kept only for reference until they are deleted.
 
 ## Run it
 
@@ -88,7 +107,7 @@ Optional: copy `frontend/.env.example` to `frontend/.env.local` and add the Fire
 ## Checks
 
 ```bash
-cd backend && npm run test:live      # 3 end-to-end suites against Neon; run before every deployment
+cd backend && npm run test:live      # 4 end-to-end suites (301 checks) against Neon; run before every deployment
 cd frontend && npm run check:data    # event archive integrity and search
 cd frontend && npm run check:render  # every page renders with its content
 cd frontend && npm run build         # production build in frontend/dist
@@ -105,7 +124,7 @@ cd frontend && npm run build         # production build in frontend/dist
 | Wing | `/teams/:id` | Heads, responsibilities, selected work |
 | Log in, Sign up | `/login`, `/signup` | Email and password with CAPTCHA, or Google |
 | Password reset | `/forgot-password`, `/reset-password?token=…` | Request a link, set a new password |
-| Dashboard | `/dashboard` | By role. Student: pending payments, upcoming events with master QR ticket, sessions, past events attended. Event head: their events with pending-payment approval, sessions and scanner. Admin: club-wide analytics, every event, create events |
+| Dashboard | `/dashboard` | By role. Student: pending payments, upcoming events with master QR ticket, sessions, past events attended. Event head: their events with pending-payment approval, sessions and scanner. Admin: club-wide analytics, every event, create and edit events, venues. Both staff roles: per-event analytics with the attendee CSV download, refunds |
 | Ticket | `/tickets/:eventId` | The master QR code for an event (signed in) |
 | Profile | `/profile` | Name, email, role; upcoming events with QR codes; past events attended (signed in) |
 | Door scanner | `/admin/scan` | Staff only (ADMIN, EVENT_HEAD): camera QR check-in at the main entrance or a session, with a full-screen green or red result |

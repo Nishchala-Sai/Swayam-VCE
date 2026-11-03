@@ -76,8 +76,13 @@ Never commit `.env` (it is git-ignored). Never paste PRIVATE values into chat, i
 | `PORT` | not secret | Default `4000` |
 | `NODE_ENV` | not secret | `production` turns on `secure` cookies |
 | `CORS_ORIGIN` | not secret | Frontend URL(s), comma separated. Default `http://localhost:5173` |
-| `UPI_ID` | not secret | The club's UPI ID shown to students on paid events |
-| `UPI_PAYEE_NAME` | not secret | Name shown next to the UPI ID |
+| `CLOUDINARY_URL` | **PRIVATE** | `cloudinary://<key>:<secret>@<cloud>`. Uploaded QR and banner images go to Cloudinary; without it they are saved in `UPLOAD_DIR` (development) |
+| `UPLOAD_DIR` | not secret | Local upload folder when `CLOUDINARY_URL` is unset. Default `backend/uploads` |
+| `BREVO_SMTP_USER` | not secret | Brevo SMTP login (Brevo > SMTP & API > SMTP). With either Brevo value unset, emails are printed in the terminal |
+| `BREVO_SMTP_PASS` | **PRIVATE** | A Brevo SMTP key |
+| `EMAIL_FROM` | not secret | Sender, e.g. `Swayam E-Cell <noreply@your-domain>`. Must be a sender or domain verified in Brevo |
+
+The UPI ID and payee name are stored per event (`events.upi_id`, `events.upi_payee_name`), not in the environment.
 
 The server refuses to start if `DATABASE_URL`, `JWT_SECRET`, `TURNSTILE_SECRET` or `QR_SECRET` is missing.
 
@@ -117,6 +122,9 @@ deletes the user's older rows.
 | `capacity` | integer | Must be > 0 (database check) |
 | `price` | integer | Whole rupees, default `0` (free). Must be ≥ 0 (database check) |
 | `upi_qr_url` | varchar(2048), nullable | https link to the club's UPI QR image. Required by the API when `price > 0` |
+| `upi_id` | varchar(100), nullable | UPI ID students can pay to (e.g. `swayam@okaxis`), shown under the QR code |
+| `upi_payee_name` | varchar(100), nullable | The name students should see in their UPI app for that ID |
+| `banner_url` | varchar(2048), nullable | Optional wide image shown at the top of the event page: an uploaded banner or an https link |
 | `payment_instructions` | text, nullable | Shown on the payment screen, e.g. "write your roll number in the UPI note" |
 | `created_by` | uuid → `users.id` | Set from the signed-in user, never from the request body |
 | `created_at` | timestamptz | Default `now()` |
@@ -235,8 +243,9 @@ and sets our own JWT cookie. Roles, sessions and data stay in our API.
 
 ### Password reset (`passwordReset.controller.js`, built)
 1. `POST /api/auth/forgot-password { email, turnstileToken }`: if an active account has that email, creates a random
-   32-byte token, stores only its SHA-256 with a 30-minute expiry (replacing older links), and **logs the link to the
-   server terminal**: `[password reset] <email>: <FRONTEND_URL>/reset-password?token=...`. The answer is always the
+   32-byte token, stores only its SHA-256 with a 30-minute expiry (replacing older links), and **emails the link** through Brevo
+   (`<FRONTEND_URL>/reset-password?token=...`). Without the Brevo SMTP settings the email is printed in the server
+   terminal instead. The answer is always the
    same 200 message, so the endpoint can't be used to find out which emails have accounts.
 2. The student opens the link; the website's Reset password page posts `POST /api/auth/reset-password { token, password }`.
    The token is deleted and the new bcrypt hash saved **in one SQL statement**, so a link works exactly once, even with
@@ -245,8 +254,8 @@ and sets our own JWT cookie. Roles, sessions and data stay in our API.
 
 Both routes have their own `passwordResetLimiter` (5 requests per 15 minutes per IP), separate from login.
 
-**Before launch:** replace the `console.log` with an email (e.g. Resend, SES or SMTP). Until then anyone who can read
-the server logs can use the links. Existing sessions stay valid after a reset (JWTs are stateless); they end when
+Set `BREVO_SMTP_USER`, `BREVO_SMTP_PASS` and `EMAIL_FROM` in production: without them the links are only printed in the
+server logs, where anyone who can read the logs could use them. Existing sessions stay valid after a reset (JWTs are stateless); they end when
 they expire (`JWT_EXPIRES_IN`).
 
 ### Using `requireAuth`
@@ -286,10 +295,14 @@ go past the new limit become `REFUND_REQUIRED` (see payments). An `EVENT_HEAD` c
   "capacity": 120,
   "price": 199,
   "upiQrUrl": "https://.../swayam-upi-qr.png",
+  "upiId": "swayam@okaxis",
+  "upiPayeeName": "Swayam E-Cell",
+  "bannerUrl": "https://.../pitch-night-banner.jpg",
   "paymentInstructions": "Write your roll number in the UPI note."
 }
 ```
-`price` (whole rupees) defaults to `0`. `upiQrUrl` must be https and is required when `price > 0`. `capacity` and
+`price` (whole rupees) defaults to `0`. `upiQrUrl` must be https and is required when `price > 0`. `bannerUrl` is optional
+(an uploaded banner path or an https link). `upiId` (`handle@bank`) and `upiPayeeName` (up to 100 characters) are optional. `capacity` and
 `price` must be JSON numbers, not strings. Invalid input returns 400 with a message naming the field. Any other fields
 (such as `id` or `createdBy`) are ignored.
 
@@ -424,6 +437,7 @@ event is a **pass holder** and pays `priceForPassHolders`; anyone else is **stan
 | Method | Path | Who | Returns |
 |---|---|---|---|
 | GET | `/api/events/:id/analytics` | ADMIN, EVENT_HEAD (own events) | `totalSeats, seatsFilled, ticketsSold, awaitingPayment, mainEventAttended, mainEventRevenue, subEventRevenue, totalRevenue, refundRequiredCount, refundedCount, subEvents[]` with each sub-event's `capacity, bookingsCount, verifiedCount, attendedCount, revenue, refundRequiredCount` |
+| GET | `/api/events/:eventId/export` | ADMIN, EVENT_HEAD (own events) | CSV attachment of every registration (one row per person, cancelled ones included): `Student Name, Email, Registration Code, Payment Status, Check-in Time (IST)`. The code is the first 8 characters of the registration id (the dashboard's Ticket ID); the time is `YYYY-MM-DD HH:MM` or `Not Attended`. UTF-8 with a byte-order mark for Excel; cells starting with `= + - @` get a leading `'` |
 | GET | `/api/analytics/overview` | ADMIN | `totalEvents, totalUsers, totalRevenue, totalTicketsSold, totalSubEventBookings, pendingPayments, refundsDue` |
 
 Revenue is the sum of `totalAmountPaid` on `VERIFIED` payments (refund-due and refunded money is excluded). Payments
@@ -489,19 +503,20 @@ use unguessable URLs. Where to host them is still to decide.
 | POST | `/api/venues` | ADMIN | `{ name }`; unique ignoring case (409) |
 | DELETE | `/api/venues/:id` | ADMIN | Removes it from the list; events keep their venue text |
 | POST | `/api/uploads/upi-qr` | ADMIN, EVENT_HEAD | multipart field `file`: PNG, JPEG or WebP (checked by content), up to 2 MB. Returns `{ path }` to send as `upiQrUrl` |
-| GET | `/api/uploads/upi-qr/<file>` | public | The uploaded image (files live in `UPLOAD_DIR`) |
+| POST | `/api/uploads/banner` | ADMIN, EVENT_HEAD | Same as `upi-qr`, up to 5 MB. Returns `{ path }` to send as `bannerUrl` |
+| GET | `/api/uploads/upi-qr/<file>`, `/api/uploads/banner/<file>` | public | The uploaded image (files live in `UPLOAD_DIR`) |
 | POST | `/api/events/:eventId/sub-events/:subEventId/auto-group` | ADMIN, EVENT_HEAD (own events) | Couples short teams into full ones |
 | GET | `/api/events/:eventId/sub-events/:subEventId/teams` | ADMIN, EVENT_HEAD (own events) | Roster: formed teams and bookings not grouped yet |
 
 - **Event schedule:** `POST /api/events` takes an optional `schedule`: `[{ date: 'YYYY-MM-DD', slots: [{ start: 'HH:MM', end:
   'HH:MM', title, kind: 'session' | 'break' }] }]`, up to 14 days and 30 slots a day, any times, no overlaps. Stored sorted
   in `events.schedule` (jsonb). `upiQrUrl` may be an uploaded path or an https link.
-- **Uploads:** with `CLOUDINARY_URL` set, `POST /api/uploads/upi-qr` stores the image in Cloudinary
-  (`swayam/upi-qr/<uuid>`) and returns its https URL; otherwise it saves to `UPLOAD_DIR` as before. A replaced or
+- **Uploads:** with `CLOUDINARY_URL` set, `POST /api/uploads/upi-qr` and `/banner` store the image in Cloudinary
+  (`swayam/upi-qr/<uuid>`, `swayam/banner/<uuid>`) and returns its https URL; otherwise it saves to `UPLOAD_DIR` as before. A replaced or
   deleted event's image is removed once no event uses it.
-- **Emails (Resend):** `RESEND_API_KEY` and `EMAIL_FROM`. Password reset links, and a "ticket ready" email to every member
-  when staff approve a payment (registrations and session bookings). Without the key, emails are printed in the
-  terminal. Sending never delays or fails the request. Test addresses (`.invalid`, `.test`, `.example`) are skipped.
+- **Emails (Brevo SMTP):** `smtp-relay.brevo.com:587` (STARTTLS) through nodemailer, with `BREVO_SMTP_USER`,
+  `BREVO_SMTP_PASS` and `EMAIL_FROM`. Password reset links, and a "ticket ready" email to every member when staff approve
+  a payment (registrations and session bookings). Without the Brevo login, emails are printed in the terminal. Sending never delays or fails the request. Test addresses (`.invalid`, `.test`, `.example`) are skipped.
 - **Editing events:** `PATCH /api/events/:id`, the same body as creating (ADMIN, or the EVENT_HEAD who created it).
 - **Refunds:** `GET /api/payments/refunds` lists REFUND_REQUIRED payments (solo or team leader) for registrations and
   bookings, scoped like the pending list. Mark one done with the existing `PATCH .../refund` endpoints.
@@ -544,7 +559,7 @@ use unguessable URLs. Where to host them is still to decide.
 
 ## 5. Live tests
 
-Three end-to-end suites in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
+Four end-to-end suites (301 checks) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
 Run them before every deployment:
 ```bash
 cd backend
@@ -557,6 +572,9 @@ npm run test:live
 - `auth-extras.mjs`: signup name, forgot and reset password (single use, expiry, replaced links, rate limit, no
   account enumeration), Google sign-in guards (not configured, missing and forged tokens), and seat availability.
   The real Google popup can only be tested by hand with a Firebase project.
+- `teams-venues.mjs`: venues, UPI QR and banner uploads, event schedules, UPI ID and payee name, team registration
+  rules, deleting events and sessions, team-competition sessions and auto-grouping, the check-in log, refunds, editing
+  events, and the attendee CSV export.
 
 Each prints PASS/FAIL per check and exits with code 1 if anything fails. They create temporary users and events (emails
 ending in `@example.invalid`, titles starting `FINAL TEST`, `SUB TEST` or `AUTH TEST`) and delete them at the end, even when a check
@@ -564,9 +582,7 @@ fails. If a run is killed midway, delete those rows by hand.
 
 **Which database:** `TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`; the first line printed shows the host. Prefer a
 Neon branch of production (Neon console → Branches → create, copy its connection string) so test rows never appear in
-the real database, even briefly. Needs `JWT_SECRET` and `QR_SECRET` from `.env`. `auth-extras.mjs` calls Cloudflare Turnstile, so `TURNSTILE_SECRET` must be the test secret (`1x0000000000000000000000000000000AA`).
-
-The old `backend/tests/integration/` suite belongs to the previous three-service backend and no longer applies.
+the real database, even briefly. Needs `JWT_SECRET` and `QR_SECRET` from `.env`. `auth-extras.mjs` calls Cloudflare Turnstile; the suites always use the test secret (`1x0000000000000000000000000000000AA`), whatever `.env` holds.
 
 ## 6. Security checklist
 helmet headers, CORS allow-list with `credentials: true`, JSON body limit 100 kB, httpOnly + `secure` +

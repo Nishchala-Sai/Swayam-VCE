@@ -33,7 +33,7 @@ app.use('/api/analytics', analyticsRoutes)
 app.use('/api/venues', venueRoutes)
 app.use('/api/uploads', uploadRoutes)
 
-// Uploaded files (UPI QR images). Names are random UUIDs and never reused, so they can be cached for good.
+// Uploaded files (UPI QR and banner images). Names are random UUIDs and never reused, so they can be cached for good.
 // cross-origin: the site may be served from another domain than the API in production.
 app.use(
   '/api/uploads',

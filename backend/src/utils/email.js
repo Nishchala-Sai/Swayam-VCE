@@ -1,12 +1,27 @@
-// Email through Resend (https://resend.com). With RESEND_API_KEY unset (local development) nothing is sent and the
-// message is printed in the terminal instead, so links such as password resets still work while testing.
-// EMAIL_FROM is the sender, e.g. "Swayam E-Cell <noreply@your-domain>" on a domain verified in Resend. Resend's own
-// onboarding@resend.dev (the default) only delivers to the Resend account owner's address.
+// Email through Brevo's SMTP relay (smtp-relay.brevo.com:587, STARTTLS) with nodemailer. With BREVO_SMTP_USER or
+// BREVO_SMTP_PASS unset (local development) nothing is sent and the message is printed in the terminal instead, so
+// links such as password resets still work while testing.
+// Brevo > SMTP & API > SMTP: the login is BREVO_SMTP_USER, an SMTP key is BREVO_SMTP_PASS. EMAIL_FROM is the sender,
+// e.g. "Swayam E-Cell <noreply@your-domain>", and must be a sender or domain verified in Brevo.
 //
 // sendEmail never throws: callers fire and forget, and a mail failure must not fail the request that caused it.
+import nodemailer from 'nodemailer'
+
 const RESERVED = /@[^@]+\.(invalid|test|example|localhost)$/i // test addresses that can never receive mail
 
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+// One pooled connection to Brevo, made on the first email
+let transport = null
+const smtp = () =>
+  (transport ??= nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false, // upgraded with STARTTLS; requireTLS refuses to send in the clear
+    requireTLS: true,
+    pool: true,
+    auth: { user: process.env.BREVO_SMTP_USER, pass: process.env.BREVO_SMTP_PASS },
+  }))
 
 export const frontendUrl = () =>
   (process.env.FRONTEND_URL || (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',')[0]).replace(/\/+$/, '')
@@ -15,9 +30,8 @@ export const frontendUrl = () =>
 export async function sendEmail({ to, subject, heading, lines, button, footer }) {
   if (!to) return
   const text = [heading, '', ...lines, ...(button ? ['', `${button.label}: ${button.url}`] : []), ...(footer ? ['', footer] : [])].join('\n')
-  const key = process.env.RESEND_API_KEY
-  if (!key) {
-    console.log(`[email not sent: RESEND_API_KEY unset] to ${to}: ${subject}\n${text}\n`)
+  if (!process.env.BREVO_SMTP_USER || !process.env.BREVO_SMTP_PASS) {
+    console.log(`[email not sent: BREVO_SMTP_USER/BREVO_SMTP_PASS unset] to ${to}: ${subject}\n${text}\n`)
     return
   }
   if (RESERVED.test(to)) return
@@ -31,14 +45,13 @@ ${button ? `<tr><td style="padding:14px 0 6px"><a href="${escape(button.url)}" s
 ${footer ? `<tr><td style="font-size:12px;line-height:1.5;color:#8c8c8c;padding-top:18px">${escape(footer)}</td></tr>` : ''}
 </table></td></tr></table></body></html>`
 
+  if (!process.env.EMAIL_FROM) {
+    console.error(`[email] EMAIL_FROM is unset, so the message to ${to} was not sent`)
+    return
+  }
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM || 'Swayam E-Cell <onboarding@resend.dev>', to: [to], subject, html, text }),
-    })
-    if (!res.ok) console.error(`[email] Resend refused the message to ${to} (${res.status}): ${(await res.text()).slice(0, 300)}`)
+    await smtp().sendMail({ from: process.env.EMAIL_FROM, to, subject, html, text })
   } catch (err) {
-    console.error(`[email] could not reach Resend for ${to}:`, err?.message ?? err)
+    console.error(`[email] Brevo did not accept the message to ${to}:`, err?.message ?? err)
   }
 }

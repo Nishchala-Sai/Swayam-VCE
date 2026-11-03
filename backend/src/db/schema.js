@@ -14,7 +14,8 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
-// price is in whole rupees; 0 means a free event. upiQrUrl and paymentInstructions are only used when price > 0.
+// price is in whole rupees; 0 means a free event. upiQrUrl, upiId, upiPayeeName and paymentInstructions are only used
+// when the event or its sessions cost money.
 export const events = pgTable(
   'events',
   {
@@ -33,7 +34,12 @@ export const events = pgTable(
     // Otherwise the most people a team may have, the leader included (2 to 11).
     maxTeamSize: integer('max_team_size'),
     upiQrUrl: varchar('upi_qr_url', { length: 2048 }),
+    // Optional: the UPI ID students can pay to (e.g. swayam@okaxis) and the name their UPI app should show for it
+    upiId: varchar('upi_id', { length: 100 }),
+    upiPayeeName: varchar('upi_payee_name', { length: 100 }),
     paymentInstructions: text('payment_instructions'),
+    // Optional wide image shown at the top of the event page: an upload (POST /api/uploads/banner) or an https link
+    bannerUrl: varchar('banner_url', { length: 2048 }),
     // Optional day-by-day timetable: [{ date: 'YYYY-MM-DD', slots: [{ start: 'HH:MM', end: 'HH:MM', title, kind }] }],
     // kind 'session' or 'break'. Validated in events.controller.js; date above stays the event's start.
     schedule: jsonb('schedule'),

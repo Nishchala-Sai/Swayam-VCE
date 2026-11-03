@@ -1,5 +1,5 @@
-// Manual UPI payment step, shared by event registrations and sub-event bookings: shows the club's UPI QR (or the
-// written instructions), then sends the 12-digit UTR, the amount paid and an optional screenshot link as proof.
+// Manual UPI payment step, shared by event registrations and sub-event bookings: shows the event's UPI QR, UPI ID and
+// payee name (or the written instructions), then sends the 12-digit UTR, the amount paid and an optional screenshot link as proof.
 import { useState } from 'react'
 import { api, assetUrl } from '../api/client'
 import { inr } from '../lib/events'
@@ -14,12 +14,22 @@ const isHttpsUrl = (s) => {
 }
 
 // kind: 'registration' → POST /api/payments/:id/proof; 'booking' → POST /api/payments/sub-event-bookings/:id/proof
-export default function PaymentForm({ kind, id, amount: defaultAmount, upiQrUrl, instructions, onSubmitted, onLater }) {
+export default function PaymentForm({ kind, id, amount: defaultAmount, upiQrUrl, upiId, upiPayeeName, instructions, onSubmitted, onLater }) {
   const [utr, setUtr] = useState('')
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : '')
   const [screenshot, setScreenshot] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function copyUpiId() {
+    try {
+      await navigator.clipboard.writeText(upiId)
+      setCopied(true)
+    } catch {
+      // clipboard blocked (e.g. not https): the ID is on screen to copy by hand
+    }
+  }
 
   async function submit(e) {
     e.preventDefault()
@@ -48,7 +58,14 @@ export default function PaymentForm({ kind, id, amount: defaultAmount, upiQrUrl,
       {upiQrUrl ? (
         <div className="upi-qr"><img src={assetUrl(upiQrUrl)} alt="Swayam UPI payment QR code" /></div>
       ) : (
-        !instructions && <Alert tone="info">The payment QR code isn't available here. Contact the organisers for UPI details.</Alert>
+        !instructions && !upiId && <Alert tone="info">The payment QR code isn't available here. Contact the organisers for UPI details.</Alert>
+      )}
+      {upiId && (
+        <p className="upi-id">
+          <span className="small muted">Pay to{upiPayeeName ? ` ${upiPayeeName}` : ''}</span>
+          <span className="mono">{upiId}</span>
+          <button type="button" className="link-btn small accent" onClick={copyUpiId}>{copied ? 'Copied' : 'Copy'}</button>
+        </p>
       )}
       {instructions && <p className="small">{instructions}</p>}
       <p className="small muted">Pay with any UPI app, then enter the details from your UPI app below.</p>
