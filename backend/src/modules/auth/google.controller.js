@@ -4,14 +4,12 @@
 //
 // Verifying ID tokens needs only the project id (Google's public signing keys are fetched by the SDK), so no
 // service-account key is required. Without FIREBASE_PROJECT_ID the endpoint answers 503 and nothing else changes.
-import crypto from 'node:crypto'
-import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
-import { BCRYPT_COST, publicUser, setAuthCookie } from './auth.controller.js'
+import { publicUser, setAuthCookie } from './auth.controller.js'
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message })
 
@@ -25,8 +23,8 @@ function getFirebaseAuth() {
   return firebaseAuth
 }
 
-// Body: { idToken }. Accounts are matched by email, so a student who signed up with a password and later uses
-// Google with the same (Google-verified) address gets the same account.
+// Body: { idToken }. Accounts are matched by email, so accounts made before sign-in became Google-only (they had a
+// password) are reached by signing in with Google on the same address.
 export async function googleLogin(req, res) {
   const auth = getFirebaseAuth()
   if (!auth) return fail(res, 503, 'Google sign-in is not configured on this server.')
@@ -48,9 +46,7 @@ export async function googleLogin(req, res) {
   const email = decoded.email.trim().toLowerCase()
   const name = typeof decoded.name === 'string' ? decoded.name.trim().slice(0, 100) || null : null
 
-  // New Google users get a random password nobody knows; they can set a real one with "Forgot password"
-  const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_COST)
-  await db.insert(users).values({ email, name, passwordHash }).onConflictDoNothing({ target: users.email })
+  await db.insert(users).values({ email, name }).onConflictDoNothing({ target: users.email })
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
   if (!user || !user.isActive) return fail(res, 401, 'This account cannot sign in. Contact the organisers.')

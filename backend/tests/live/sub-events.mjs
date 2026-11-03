@@ -16,7 +16,7 @@ let subIds = []
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'],
     ...['p1', 'p2', 's1', 's2', 's3', 's4', 'w1', 'nobody', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'c1', 'c2', 'c3', 'c4', 'c5', 'late'].map((n) => [n, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), passwordHash: 'x', role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), role }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
   const evs = await db.insert(events).values([
     { title: `SUB TEST fest ${tag}`, description: 't', date: new Date(Date.now() + 864e5), location: 't', capacity: 50, price: 200, upiQrUrl: 'https://example.invalid/qr.png', createdBy: U.head1 },

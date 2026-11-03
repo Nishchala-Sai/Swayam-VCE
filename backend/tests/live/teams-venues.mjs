@@ -32,7 +32,7 @@ const book = (who, body) => call(who, 'POST', '/registrations/book-sub-event', b
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'],
     ...['a1', 'a2', 'b1', 'c1', 'd1', 'd2', 'd3', 'e1', 'e2', 'p1', 'x1', 'x2', 'x3', 'x4'].map((n) => [n, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, passwordHash: 'x', role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
 
   console.log('\n== Venues')

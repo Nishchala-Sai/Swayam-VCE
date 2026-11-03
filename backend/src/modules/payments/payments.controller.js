@@ -6,7 +6,6 @@ import { camelRow, canManageEvent } from '../../db/fragments.js'
 import { isUuid } from '../../utils/isUuid.js'
 import { isHttpsUrl } from '../../utils/isHttpsUrl.js'
 import { readAmount } from '../registrations/team.js'
-import { notifyApproved } from './notify.js'
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message })
 
@@ -174,7 +173,6 @@ const verify = (kind) => async (req, res) => {
 
   if (decided.rows.length) {
     const rows = decided.rows.map(camelRow)
-    if (approve) void notifyApproved(kind.noun, rows) // emails each member their ticket; never delays this reply
     const leader = rows.find((r) => r.id === id)
     const teammates = rows.filter((r) => r.id !== id)
     const message =

@@ -19,7 +19,8 @@ export async function requireAuth(req, res, next) {
   } catch {
     return unauthorized(res) // expired, malformed or wrong signature
   }
-  if (!isUuid(payload.sub)) return unauthorized(res)
+  // Session tokens have no audience; anything with one (a login-link token) is not a session
+  if (!isUuid(payload.sub) || payload.aud !== undefined) return unauthorized(res)
 
   try {
     const [user] = await db

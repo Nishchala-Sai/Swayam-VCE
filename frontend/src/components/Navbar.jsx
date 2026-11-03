@@ -38,7 +38,7 @@ export default function Navbar() {
               <button className="link-btn" onClick={onLogout}>Log out</button>
             </>
           )}
-          {ready && !user && <Link className="btn btn--sm" to="/login">Log in</Link>}
+          {ready && !user && <Link className="btn btn--sm" to="/login">Sign in</Link>}
         </nav>
       </div>
     </header>

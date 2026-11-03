@@ -110,7 +110,7 @@ export default function RegisterModal({ event, registrationId: existingId = null
                 {mates.length < maxMates && (
                   <button type="button" className="link-btn" onClick={addMate}>+ Add another teammate</button>
                 )}
-                <p className="hint">Every teammate needs a Swayam account with this email. Their ticket appears on their own dashboard.</p>
+                <p className="hint">Every teammate needs to have signed in to Swayam once with this Google account. Their ticket appears on their own dashboard.</p>
               </fieldset>
               {paid && (
                 <div className="field team-total" aria-live="polite">

@@ -368,11 +368,6 @@ a.card:hover { border-color: #555; }
 
 /* 11. Account pages -------------------------------------------------------------------------------------------- */
 .narrow { max-width: 460px; }
-.auth-or { display: flex; align-items: center; gap: 12px; color: var(--mute); font-size: .9rem; margin: 22px 0; }
-.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.auth-foot { color: var(--mute); margin-top: 22px; }
-.auth-foot a { color: var(--fg); }
-.turnstile { min-height: 65px; margin: 4px 0 18px; }
 .ticket-list { border-top: 1px solid var(--line); }
 .ticket-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px 24px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--line); }
 .ticket-row h3 { font-size: 1.25rem; margin-bottom: 2px; }

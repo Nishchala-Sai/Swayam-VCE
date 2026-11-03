@@ -81,9 +81,8 @@ try {
   expect('/teams/not-a-wing', ['Page not found'])
   expect('/events/not-an-event', ['Page not found'])
   expect('/does-not-exist', ['Page not found'])
-  expect('/forgot-password', ['Reset your password'])
-  expect('/reset-password?token=abc', ['Choose a new password'])
-  expect('/reset-password', ['This link is incomplete'])
+  // The password pages are gone: their old links render no reset form
+  for (const path of ['/signup', '/forgot-password', '/reset-password?token=abc']) expect(path, [], ['Reset your password', 'Choose a new password', 'Create account'])
   // Before the session check finishes, auth pages and protected pages show a loading state rather than a redirect
   expect('/profile', ['Loading'])
   console.log(`\nLifecycle stages available: ${lifecycleStages.length}`)

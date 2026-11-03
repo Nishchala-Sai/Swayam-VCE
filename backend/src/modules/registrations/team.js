@@ -38,7 +38,7 @@ export async function resolveMembers(leader, team) {
     .from(users)
     .where(and(inArray(users.email, team.emails), eq(users.isActive, true)))
   const missing = team.emails.filter((e) => !found.some((u) => u.email === e))
-  if (missing.length) return { error: `These teammates need a Swayam account first: ${missing.join(', ')}` }
+  if (missing.length) return { error: `These teammates need to sign in to Swayam with Google once first: ${missing.join(', ')}` }
   return {
     members: members.concat(team.emails.map((e) => ({ userId: found.find((u) => u.email === e).id, email: e, isLeader: false }))),
   }

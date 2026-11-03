@@ -6,9 +6,11 @@ export const userRole = pgEnum('user_role', ['STUDENT', 'ADMIN', 'EVENT_HEAD'])
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).notNull().unique(),
-  // Display name, optional: set at signup (PATCH /api/auth/me) or from the Google account
+  // Display name: from the Google account, editable with PATCH /api/auth/me
   name: varchar('name', { length: 100 }),
-  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  // Unused since sign-in became Google-only (migration 0001 made it nullable and cleared every hash). Kept for now so
+  // a deploy never runs code that expects the column against a database without it; safe to drop in a later release.
+  passwordHash: varchar('password_hash', { length: 255 }),
   role: userRole('role').notNull().default('STUDENT'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -177,18 +179,4 @@ export const venues = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('venues_name_lower_unique').on(sql`lower(${t.name})`)],
-)
-
-// One row per outstanding password-reset link. Only the SHA-256 of the token is stored, so a database leak can't be
-// used to reset passwords. A row is deleted when it is used, and all of a user's rows when a new link is requested.
-export const passwordResetTokens = pgTable(
-  'password_reset_tokens',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').notNull().references(() => users.id),
-    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index('password_reset_tokens_user_idx').on(t.userId)],
 )

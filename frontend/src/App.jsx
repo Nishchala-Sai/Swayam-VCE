@@ -10,9 +10,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import About from './pages/About'
 import DepartmentDetail from './pages/DepartmentDetail'
-import { Login, Signup } from './pages/Auth'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
+import { Login } from './pages/Auth'
 import Dashboard from './pages/Dashboard'
 import Ticket from './pages/Ticket'
 import Profile from './pages/Profile'
@@ -77,9 +75,10 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/teams/:departmentId" element={<DepartmentDetail />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Sign-in is Google-only; older links to the password pages land on the sign-in page */}
+          {['/signup', '/forgot-password', '/reset-password'].map((path) => (
+            <Route key={path} path={path} element={<Navigate to="/login" replace />} />
+          ))}
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/tickets/:eventId" element={<RequireAuth><Ticket /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />

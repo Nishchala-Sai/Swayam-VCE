@@ -99,7 +99,7 @@ export default function Profile() {
             <div><dt>Member since</dt><dd>{fmtDate(new Date(user.createdAt))}</dd></div>
             <div><dt>Events</dt><dd>{upcoming.length} upcoming, {past.length} past</dd></div>
           </dl>
-          <p className="small muted mt-md">Want to change your password? <Link className="text-link" to="/forgot-password">Send a reset link</Link></p>
+          <p className="small muted mt-md">You sign in with Google, so there is no password to manage here.</p>
         </aside>
       </div>
 
