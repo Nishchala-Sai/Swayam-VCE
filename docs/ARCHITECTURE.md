@@ -19,7 +19,7 @@ Neon serverless PostgreSQL
 - **Backend** (`backend/`): **one** Express API. No microservices and no payment gateway. Firebase is used only to
   verify "Sign in with Google" tokens; sessions and data stay in our API.
 - **Database**: Neon serverless PostgreSQL, accessed only through Drizzle ORM. The schema is defined in code
-  (`backend/src/db/schema.js`) and applied with `npm run db:push`.
+  (`backend/src/db/schema.js`) and applied with versioned migrations in `backend/drizzle/` (`npm run db:migrate`).
 
 Paths starting with `src/` in the frontend sections below refer to `frontend/src/`.
 
@@ -75,7 +75,8 @@ In production, serve the site and the API from the same site (for example `swaya
 ### Folder structure
 ```
 backend/
-├── package.json            scripts: dev, start, db:push, db:studio
+├── package.json            scripts: dev, start, db:generate, db:migrate, db:baseline, db:studio, db:seed, test:live
+├── drizzle/                SQL migrations (0000_init.sql, ...) and their snapshots
 ├── drizzle.config.js       points drizzle-kit at src/db/schema.js and DATABASE_URL
 ├── .env.example            copy to .env (never commit .env)
 └── src/

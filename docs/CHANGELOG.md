@@ -11,6 +11,9 @@
   `BREVO_SMTP_PASS`, `EMAIL_FROM`. `RESEND_API_KEY` removed.
 - The old three-service backend (`backend/services/`) moved out of the repo to `Desktop/swayam-archive/`.
 - Live tests: 301 checks in 4 suites. The suites always use Cloudflare's test Turnstile secret.
+- Versioned migrations: `drizzle/0000_init.sql`, `npm run db:generate` / `db:migrate` replace `db:push`. The existing
+  Neon database is baselined (`npm run db:baseline`). `drizzle-kit` is now a runtime dependency so Render can migrate on start.
+- Deployment: `frontend/vercel.json` (proxies `/api` to Render, SPA fallback) and `docs/DEPLOYMENT.md`.
 
 ## v3.5 (October 2026): launch fixes and analytics
 - Uploaded QR images go to Cloudinary (CLOUDINARY_URL); local disk only in development.

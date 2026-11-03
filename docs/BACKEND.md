@@ -29,7 +29,7 @@ Requires Node.js 20+ and a free Neon account (https://neon.tech). Nothing runs i
    ```
 4. **Create the tables.**
    ```bash
-   npm run db:push           # applies src/db/schema.js to the Neon database
+   npm run db:migrate        # applies the migrations in drizzle/ to the Neon database
    ```
 5. **Run.**
    ```bash
@@ -45,14 +45,36 @@ shared database. A branch has its own connection string; put it in your `.env`.
 |---|---|
 | `npm run dev` | Start with auto-restart (`node --watch`) |
 | `npm start` | Start for production |
-| `npm run db:push` | Make the database match `src/db/schema.js`. Review the changes it prints before confirming, especially when it wants to drop columns |
+| `npm run db:generate` | After editing `src/db/schema.js`: write a new SQL migration to `drizzle/` (add `-- --name what_changed`) |
+| `npm run db:migrate` | Apply every migration in `drizzle/` the database hasn't had yet (`drizzle-kit migrate`). Safe to run repeatedly; production runs it on every start |
+| `npm run db:baseline` | One-off: mark `0000_init` as applied on a database created earlier with `db:push`. Checks every table and column exists first |
 | `npm run db:studio` | Open Drizzle Studio, a browser UI for viewing and editing rows |
 | `npm run db:seed` | Create or reset the three test accounts (see `users` below) |
 
-### Changing the schema
-Edit `src/db/schema.js`, then run `npm run db:push`. Column names in the database are `snake_case`
-(`password_hash`); in JavaScript they are `camelCase` (`passwordHash`). Before launch, switch from `db:push` to
-versioned migrations (`drizzle-kit generate` + `drizzle-kit migrate`) so production changes are reviewed in pull requests.
+### Changing the schema (migrations)
+The schema lives in `src/db/schema.js`; the database is changed only by the versioned SQL files in `drizzle/`, which are
+committed and reviewed in pull requests. Column names in the database are `snake_case` (`password_hash`); in JavaScript
+they are `camelCase` (`passwordHash`).
+
+1. Edit `src/db/schema.js`.
+2. `npm run db:generate -- --name add_event_tags` writes `drizzle/0001_add_event_tags.sql`. Read it: renames and drops
+   need care (drizzle-kit asks whether a changed column is a rename).
+3. `npm run db:migrate` applies it to your database (use a Neon branch). Run `npm run test:live`.
+4. Commit the schema change and the `drizzle/` files together. Production applies them on the next deploy, because the
+   Render start command is `npm run db:migrate && npm start`.
+
+Production commands (run from `backend/` with production's `DATABASE_URL`):
+```bash
+npx drizzle-kit migrate      # same as npm run db:migrate: applies pending migrations, records them in drizzle.__drizzle_migrations
+npm run db:baseline          # only once, only for a database that was created with db:push (already done for the current Neon database)
+```
+Never run `drizzle-kit push` against production: it changes tables without a migration record, and the next migration
+can then fail.
+
+**Baseline (already done, November 2026).** The current Neon database was built with `db:push` before migrations
+existed. `npm run db:baseline` checked that every enum, table and column of `drizzle/0000_init.sql` exists, then recorded
+`0000_init` in `drizzle.__drizzle_migrations` without running it. A new, empty database needs no baseline:
+`npm run db:migrate` creates everything.
 
 ### Neon HTTP driver notes
 `drizzle-orm/neon-http` sends each query as one HTTPS request. It does **not** support interactive transactions
@@ -70,7 +92,7 @@ Never commit `.env` (it is git-ignored). Never paste PRIVATE values into chat, i
 | `JWT_EXPIRES_IN` | not secret | Login lifetime, e.g. `7d`. Default `7d` |
 | `QR_SECRET` | **PRIVATE** | Signs QR tickets. Required. At least 32 random characters, different from `JWT_SECRET`. Changing it invalidates every ticket already issued |
 | `TURNSTILE_SECRET` | **PRIVATE** | Cloudflare Turnstile secret key. Required. Locally use the test secret `1x0000000000000000000000000000000AA` (always passes) or `2x0000000000000000000000000000000AA` (always fails) |
-| `TRUST_PROXY` | not secret | Number of proxies in front of the API: `0` locally, usually `1` on Render or Railway. Rate limiting is wrong without it (section 4) |
+| `TRUST_PROXY` | not secret | Number of proxies in front of the API: `0` locally, `1` on Render alone, `2` on Render behind the Vercel `/api` rewrite (`docs/DEPLOYMENT.md`). Rate limiting is wrong without it (section 4) |
 | `FIREBASE_PROJECT_ID` | not secret | Firebase project id for "Sign in with Google". Optional: without it `/api/auth/google-login` answers 503 |
 | `FRONTEND_URL` | not secret | Public URL of the website, used in password-reset links. Default: the first `CORS_ORIGIN` |
 | `PORT` | not secret | Default `4000` |

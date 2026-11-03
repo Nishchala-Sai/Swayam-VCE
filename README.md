@@ -62,11 +62,13 @@ Swayam-VCE/
 ├── scripts/content/           Python scripts that built the event archive from the reports
 ├── backend/                   Express API
 │   ├── .env.example           copy to .env; never commit .env
+│   ├── drizzle/               SQL migrations (npm run db:generate, db:migrate)
 │   ├── src/                   server.js, app.js, db/, middleware/, utils/, modules/
 │   ├── scripts/               seed scripts for test accounts and demo data
 │   └── tests/live/            end-to-end suites (npm run test:live)
 └── frontend/
     ├── .env.example           copy to .env.local (API URL, Turnstile and Firebase web settings)
+    ├── vercel.json            Vercel: /api proxied to the Render API, other paths to the single-page app
     ├── index.html             fonts, meta
     ├── vite.config.js         dev proxy: /api -> http://localhost:4000
     ├── scripts/               content and rendering checks (npm run check:data, check:render)
@@ -91,7 +93,7 @@ Requires Node.js 20+ and a Neon database. Start the backend first; the site stil
 cd backend
 cp .env.example .env    # set DATABASE_URL, JWT_SECRET, QR_SECRET (TURNSTILE_SECRET test key is pre-filled)
 npm install
-npm run db:push         # create or update the tables in Neon
+npm run db:migrate      # create or update the tables in Neon (versioned migrations in backend/drizzle/)
 npm run db:seed         # optional: test logins admin@, manager@, student@swayam.com (password Password123!)
 npm run dev             # http://localhost:4000/health
 
@@ -103,6 +105,25 @@ npm run dev             # http://localhost:5173
 
 Optional: copy `frontend/.env.example` to `frontend/.env.local` and add the Firebase web settings to turn on
 "Sign in with Google" (also set `FIREBASE_PROJECT_ID` in `backend/.env`).
+
+## Database migrations
+
+The schema is in `backend/src/db/schema.js` and changes ship as SQL migrations in `backend/drizzle/`:
+
+```bash
+cd backend
+npm run db:generate -- --name what_changed   # after editing schema.js: writes drizzle/NNNN_what_changed.sql
+npm run db:migrate                           # applies pending migrations (npx drizzle-kit migrate)
+```
+
+Production runs `npm run db:migrate` on every start (see `docs/DEPLOYMENT.md`). The current Neon database was created
+with `db:push` and has already been baselined (`npm run db:baseline`), so `0000_init` is recorded as applied there.
+Don't use `drizzle-kit push` on production.
+
+## Deployment
+
+Backend on Render, frontend on Vercel (which proxies `/api` to Render). Step-by-step guide, environment variables and
+the go-live checklist: `docs/DEPLOYMENT.md`.
 
 ## Checks
 
@@ -139,7 +160,8 @@ Club details and contact, team, wings and the Vision in Action stages are in `fr
 | File | Contents |
 |---|---|
 | `docs/ARCHITECTURE.md` | How the pieces fit: frontend structure and routes, auth flow, UPI flow, tickets and check-in |
-| `docs/BACKEND.md` | Backend setup, environment variables, database, every API endpoint, Google sign-in, password reset, tests |
+| `docs/BACKEND.md` | Backend setup, environment variables, database and migrations, every API endpoint, Google sign-in, password reset, tests |
+| `docs/DEPLOYMENT.md` | Deploying to Render and Vercel, production environment variables, go-live checklist |
 | `docs/DESIGN_SYSTEM.md` | Colours, typography, layout, components, motion, accessibility |
 | `docs/FONTS.md` | The two Google Fonts |
 | `docs/CONTENT_GUIDE.md` | How to edit the archive, team, wings and home page content |
