@@ -19,6 +19,9 @@ export const userColumns = {
 export const isProfileComplete = (u) => Boolean(u.name && u.phone && u.rollNumber && u.branch && u.year)
 export const withProfileFlag = (u) => ({ ...u, profileComplete: isProfileComplete(u) })
 
+// The college's branches, exactly as stored and shown. Must match BRANCHES in frontend/src/lib/profile.js.
+export const BRANCHES = ['CSE', 'CSE (AIML)', 'IT', 'ECE', 'EEE', 'Mechanical', 'Civil']
+
 export const PROFILE_REQUIRED = 'Complete your profile (name, phone, roll number, branch and year) before registering.'
 
 // An Indian mobile number in any usual spelling (+91 98765 43210, 098765-43210) → 9876543210, or null
@@ -50,9 +53,9 @@ export function readProfile(body) {
     values.rollNumber = r
   }
   if (branch !== undefined) {
-    const b = typeof branch === 'string' ? branch.trim().replace(/\s+/g, ' ') : ''
-    if (b.length < 2 || b.length > 60) return { error: 'Enter your branch (up to 60 characters).' }
-    values.branch = b
+    const b = typeof branch === 'string' ? branch.trim().replace(/\s+/g, ' ').toLowerCase() : ''
+    values.branch = BRANCHES.find((x) => x.toLowerCase() === b)
+    if (!values.branch) return { error: `Branch must be one of: ${BRANCHES.join(', ')}.` }
   }
   if (year !== undefined) {
     if (!Number.isInteger(year) || year < 1 || year > 4) return { error: 'Year must be 1, 2, 3 or 4.' }

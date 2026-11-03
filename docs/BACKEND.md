@@ -121,7 +121,7 @@ The server refuses to start if `DATABASE_URL`, `JWT_SECRET` or `QR_SECRET` is mi
 | `password_hash` | varchar(255), nullable | **Unused.** Sign-in is Google-only; migration 0001 cleared every hash. Kept only so a deploy never meets a missing column; drop it in a later release |
 | `phone` | varchar(10), nullable | Indian mobile, 10 digits without +91 (the WhatsApp number) |
 | `roll_number` | varchar(30), nullable | Uppercased, e.g. `1602-23-733-042` |
-| `branch` | varchar(60), nullable | e.g. `CSE (AI & ML)` |
+| `branch` | varchar(60), nullable | One of `CSE`, `CSE (AIML)`, `IT`, `ECE`, `EEE`, `Mechanical`, `Civil` (`BRANCHES` in `profile.js`) |
 | `year` | integer, nullable | 1 to 4 (check constraint `users_year_range`) |
 | `role` | enum `user_role` | `STUDENT` (default), `EVENT_HEAD`, `ADMIN` |
 | `is_active` | boolean | Default `true`. `false` blocks the user everywhere |
@@ -260,7 +260,7 @@ Staff need each student's phone (WhatsApp) number, roll number, branch and year.
 sends the student to `/welcome` to fill them in, and keeps sending them there until they have.
 - `PATCH /api/auth/me` validates each field it is sent: `name` 1 to 100 characters; `phone` an Indian mobile, accepted as
   `+91 98765 43210`, `098765-43210` and so on and stored as 10 digits; `rollNumber` 3 to 30 letters, digits, spaces,
-  `-` or `/`, uppercased; `branch` 2 to 60 characters; `year` the number 1, 2, 3 or 4. Anything else is 400.
+  `-` or `/`, uppercased; `branch` one of the college's branches (`BRANCHES`, matched ignoring case and spacing); `year` the number 1, 2, 3 or 4. Anything else is 400.
 - `profileComplete` is true when all five are set.
 - **Registering needs a complete profile:** `POST /api/registrations/:eventId` and `POST /api/registrations/book-sub-event`
   answer 403 `Complete your profile (name, phone, roll number, branch and year) before registering.` otherwise, and a
@@ -569,7 +569,7 @@ use unguessable URLs. Where to host them is still to decide.
 
 ## 5. Live tests
 
-Four end-to-end suites (321 checks; 315 when Cloudinary is set) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
+Four end-to-end suites (322 checks; 316 when Cloudinary is set) in `backend/tests/live/` start the real app and call it over HTTP against a real Neon database.
 Run them before every deployment:
 ```bash
 cd backend

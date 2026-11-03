@@ -10,7 +10,7 @@ export default function ProfileForm({ submitLabel = 'Save', onSaved }) {
     name: user.name ?? '',
     phone: user.phone ? formatPhone(user.phone) : '',
     rollNumber: user.rollNumber ?? '',
-    branch: user.branch ?? '',
+    branch: BRANCHES.includes(user.branch) ? user.branch : '',
     year: user.year ? String(user.year) : '',
   })
   const [errors, setErrors] = useState({})
@@ -51,10 +51,10 @@ export default function ProfileForm({ submitLabel = 'Save', onSaved }) {
       {field('rollNumber', 'Roll number', <input {...aria('rollNumber')} autoCapitalize="characters" placeholder="1602-23-733-042" value={f.rollNumber} onChange={set('rollNumber')} />)}
       <div className="field-row">
         {field('branch', 'Branch', (
-          <>
-            <input {...aria('branch')} list="pf-branches" placeholder="CSE" value={f.branch} onChange={set('branch')} />
-            <datalist id="pf-branches">{BRANCHES.map((b) => <option key={b} value={b} />)}</datalist>
-          </>
+          <select {...aria('branch')} value={f.branch} onChange={set('branch')}>
+            <option value="">Choose…</option>
+            {BRANCHES.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
         ))}
         {field('year', 'Year', (
           <select {...aria('year')} value={f.year} onChange={set('year')}>
