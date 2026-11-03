@@ -21,15 +21,18 @@ export async function exportAttendees(req, res) {
   if (!event) return
 
   const { rows } = await db.execute(sql`
-    select r.id, r.payment_status, r.attended_at, u.name, u.email
+    select r.id, r.payment_status, r.attended_at, u.name, u.email, u.phone, u.roll_number, u.branch, u.year
     from registrations r join users u on u.id = r.user_id
     where r.event_id = ${event.id}::uuid
     order by lower(coalesce(u.name, u.email)), u.email`)
 
   const lines = [
-    ['Student Name', 'Email', 'Registration Code', 'Payment Status', 'Check-in Time (IST)'],
+    ['Student Name', 'Email', 'Phone', 'Roll Number', 'Branch', 'Year', 'Registration Code', 'Payment Status', 'Check-in Time (IST)'],
     // The code is the start of the registration id, as the Ticket ID column in the dashboard shows it
-    ...rows.map((r) => [r.name, r.email, r.id.slice(0, 8).toUpperCase(), r.payment_status, r.attended_at ? istTime(new Date(r.attended_at)) : 'Not Attended']),
+    ...rows.map((r) => [
+      r.name, r.email, r.phone, r.roll_number, r.branch, r.year,
+      r.id.slice(0, 8).toUpperCase(), r.payment_status, r.attended_at ? istTime(new Date(r.attended_at)) : 'Not Attended',
+    ]),
   ]
   const csv = lines.map((line) => line.map(cell).join(',')).join('\r\n')
 

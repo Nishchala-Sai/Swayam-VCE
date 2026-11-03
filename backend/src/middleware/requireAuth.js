@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { users } from '../db/schema.js'
 import { isUuid } from '../utils/isUuid.js'
+import { userColumns, withProfileFlag } from '../modules/auth/profile.js'
 
 const unauthorized = (res) => res.status(401).json({ success: false, message: 'Unauthorized' })
 
@@ -19,16 +20,13 @@ export async function requireAuth(req, res, next) {
   } catch {
     return unauthorized(res) // expired, malformed or wrong signature
   }
-  if (!isUuid(payload.sub)) return unauthorized(res)
+  // Session tokens have no audience; anything with one (a login-link token) is not a session
+  if (!isUuid(payload.sub) || payload.aud !== undefined) return unauthorized(res)
 
   try {
-    const [user] = await db
-      .select({ id: users.id, email: users.email, name: users.name, role: users.role, isActive: users.isActive, createdAt: users.createdAt })
-      .from(users)
-      .where(eq(users.id, payload.sub))
-      .limit(1)
+    const [user] = await db.select(userColumns).from(users).where(eq(users.id, payload.sub)).limit(1)
     if (!user || !user.isActive) return unauthorized(res)
-    req.user = user // never includes passwordHash
+    req.user = withProfileFlag(user)
     next()
   } catch (err) {
     next(err) // database outage is a 500, not a 401, so the frontend does not log the user out

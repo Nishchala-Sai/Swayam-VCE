@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import jwt from 'jsonwebtoken'
 import { and, eq, inArray, like } from 'drizzle-orm'
-import { db, schema, tickets, startServer, makeClient, makeChecker } from './helpers.mjs'
+import { db, schema, tickets, startServer, makeClient, makeChecker, PROFILE } from './helpers.mjs'
 import { UPLOAD_DIR } from '../../src/modules/uploads/uploads.controller.js'
 
 const { users, events, registrations, subEvents, subEventBookings, venues } = schema
@@ -32,7 +32,7 @@ const book = (who, body) => call(who, 'POST', '/registrations/book-sub-event', b
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'],
     ...['a1', 'a2', 'b1', 'c1', 'd1', 'd2', 'd3', 'e1', 'e2', 'p1', 'x1', 'x2', 'x3', 'x4'].map((n) => [n, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, passwordHash: 'x', role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role, ...PROFILE }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
 
   console.log('\n== Venues')
@@ -284,10 +284,30 @@ try {
   check('starts with a UTF-8 byte-order mark for Excel', bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])))
   const csv = bytes.subarray(3).toString('utf8')
   const lines = csv.split('\r\n')
-  check('header row', lines[0] === '"Student Name","Email","Registration Code","Payment Status","Check-in Time (IST)"', { code: 200, body: { message: lines[0] } })
-  check('checked-in student: code and IST check-in time', lines.includes(`"x1 T","${mail('x1')}","${regX1.id.slice(0, 8).toUpperCase()}","VERIFIED","2026-12-01 10:32"`), { code: 200, body: { message: csv } })
+  check('header row', lines[0] === '"Student Name","Email","Phone","Roll Number","Branch","Year","Registration Code","Payment Status","Check-in Time (IST)"', { code: 200, body: { message: lines[0] } })
+  const details = `"${PROFILE.phone}","${PROFILE.rollNumber}","${PROFILE.branch}","${PROFILE.year}"`
+  check('checked-in student: profile, code and IST check-in time', lines.includes(`"x1 T","${mail('x1')}",${details},"${regX1.id.slice(0, 8).toUpperCase()}","VERIFIED","2026-12-01 10:32"`), { code: 200, body: { message: csv } })
   check('not checked in: Not Attended; formula-like name neutralised', lines.some((l) => l.startsWith(`"'=HYPERLINK(""http://x"")","${mail('x2')}"`) && l.endsWith('"PENDING","Not Attended"')), { code: 200, body: { message: csv } })
   check('one row per registration', lines.length === 3)
+
+  console.log('\n== Registrations dashboard data')
+  const regsUrl = `/events/${E.banner}/registrations`
+  r = await call(null, 'GET', regsUrl); check('logged out -> 401', r.code === 401, r)
+  r = await call('a1', 'GET', regsUrl); check('student -> 403', r.code === 403, r)
+  r = await call('head2', 'GET', regsUrl); check("another event head can't see it -> 403", r.code === 403, r)
+  r = await call('admin', 'GET', regsUrl); check('admin sees any event', r.code === 200, r)
+  r = await call('head1', 'GET', regsUrl)
+  const rowX1 = r.body.data?.registrations.find((x) => x.email === mail('x1'))
+  check('own event head: one row per registration, newest first', r.code === 200 && r.body.data.registrations.length === 2 && r.body.data.registrations[0].email === mail('x2'), r)
+  check('rows carry student details, code, payment and check-in', rowX1 && rowX1.phone === PROFILE.phone && rowX1.rollNumber === PROFILE.rollNumber && rowX1.branch === PROFILE.branch && rowX1.year === PROFILE.year
+    && rowX1.code === regX1.id.slice(0, 8).toUpperCase() && rowX1.paymentStatus === 'VERIFIED' && rowX1.attendedAt && Array.isArray(rowX1.sessions), r)
+  check('includes session bookings and a timestamp', Array.isArray(r.body.data?.bookings) && !Number.isNaN(Date.parse(r.body.data.updatedAt)), r)
+
+  console.log('\n== All students (admin)')
+  r = await call('head1', 'GET', '/analytics/students'); check('event head -> 403', r.code === 403, r)
+  r = await call('admin', 'GET', '/analytics/students')
+  const studentX1 = r.body.data?.find((s) => s.email === mail('x1'))
+  check('admin: every account with details and the events it holds a seat for', r.code === 200 && studentX1?.phone === PROFILE.phone && studentX1.events.some((e) => e.eventId === E.banner && e.attended === true), r)
 
   if (!process.env.CLOUDINARY_URL) {
     const origin = server.api.replace(/\/api$/, '')

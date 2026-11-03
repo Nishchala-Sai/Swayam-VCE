@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.7 (November 2026): Google-only sign-in, no email, live registrations
+- Sign-in is Google only. Password registration, login and reset are removed (their endpoints answer 404, old page
+  links go to `/login`), along with Cloudflare Turnstile and bcrypt. Accounts that had a password are reached by signing
+  in with Google on the same email. The sign-in page warns when it is opened inside Instagram or similar apps.
+- Emergency sign-in: `npm run login-link -- <email>` (Render's Shell) prints a 10-minute link (`GET /api/auth/link`).
+- No email: the Brevo module, the payment-approved emails and nodemailer are removed. Students see approvals and
+  rejections at the top of their dashboard, and the ticket page has Download ticket (a PNG that works offline).
+- Student details required: phone, roll number, branch and year (`users.phone`, `roll_number`, `branch`, `year`),
+  asked on `/welcome` after the first sign-in and editable on the profile. Registering, booking and being added as a
+  teammate need them. The CSV export includes them.
+- Live Registrations tab per event (`GET /api/events/:eventId/registrations`): refreshed every 15 seconds, sortable,
+  searchable and filterable, with Download Excel (`write-excel-file`, a second sheet of session bookings) and Copy phone
+  numbers for WhatsApp. Admins get All students (`GET /api/analytics/students`).
+- Migrations `0001_google_only_sign_in` (drops `password_reset_tokens`, clears and relaxes `users.password_hash`) and
+  `0002_student_profile`.
+- Environment: `TURNSTILE_SECRET`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS`, `EMAIL_FROM` and `VITE_TURNSTILE_SITE_KEY`
+  are no longer used; the server no longer requires `TURNSTILE_SECRET` to start.
+- Live tests: 321 checks in 4 suites (315 when Cloudinary is set, which skips the local-disk upload checks).
+
 ## v3.6 (November 2026): banners, CSV export, per-event UPI, Brevo
 - Event banners: optional image uploaded in the event form (`POST /api/uploads/banner`, Cloudinary, up to 5 MB),
   shown at the top of the event page. New column `events.banner_url`.

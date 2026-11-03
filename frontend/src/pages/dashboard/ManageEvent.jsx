@@ -1,4 +1,5 @@
-// One event, for the staff who manage it: analytics, the pending-payments queue, sessions, and the door scanner.
+// One event, for the staff who manage it: the live registrations sheet, analytics, the pending-payments queue,
+// sessions, and the door scanner.
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
@@ -8,10 +9,12 @@ import PendingPayments from './PendingPayments'
 import Sessions, { CapacityEditor } from './Sessions'
 import DeleteControl from './DeleteControl'
 import Analytics from './Analytics'
+import Registrations from './Registrations'
 import EventForm from './EventForm'
 
 export const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'registrations', label: 'Registrations' },
   { id: 'payments', label: 'Pending payments' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'analytics', label: 'Analytics' },
@@ -98,6 +101,8 @@ export default function ManageEvent({ event, tab, setTab, pending, pendingCount,
       <Alert>{error}</Alert>
       {tab === 'payments' ? (
         <PendingPayments eventId={event.key} pending={pending} onDecided={refreshAfterDecision} />
+      ) : tab === 'registrations' ? (
+        <Registrations event={event} />
       ) : !analytics ? (
         !error && <Loading />
       ) : tab === 'analytics' ? (

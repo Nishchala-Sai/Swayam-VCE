@@ -18,6 +18,7 @@ export default function Dashboard() {
   const staff = user.role === 'ADMIN' || user.role === 'EVENT_HEAD'
   const myTickets = staff && params.get('view') === 'tickets'
   const refunds = staff && params.get('view') === 'refunds'
+  const students = user.role === 'ADMIN' && params.get('view') === 'students' // shown by StaffDashboard
   const t = TITLES[user.role] ?? TITLES.STUDENT
 
   return (
@@ -28,9 +29,14 @@ export default function Dashboard() {
 
       {staff && (
         <div className="chips mt-md" role="group" aria-label="Dashboard view">
-          <button className="chip" aria-pressed={!myTickets && !refunds} onClick={() => setParams({})}>
+          <button className="chip" aria-pressed={!myTickets && !refunds && !students} onClick={() => setParams({})}>
             {user.role === 'ADMIN' ? 'Manage the club' : 'Manage events'}
           </button>
+          {user.role === 'ADMIN' && (
+            <button className="chip" aria-pressed={students} onClick={() => setParams({ view: 'students' })}>
+              All students
+            </button>
+          )}
           <button className="chip" aria-pressed={refunds} onClick={() => setParams({ view: 'refunds' })}>
             Refunds
           </button>

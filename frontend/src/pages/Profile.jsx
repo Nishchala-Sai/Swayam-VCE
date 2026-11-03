@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import ProfileForm from '../components/ProfileForm'
 import QrTicket from '../components/QrTicket'
 import { Alert, Empty, Loading, Modal, Pill } from '../components/ui'
 import { useAuth } from '../context/auth'
@@ -9,7 +10,7 @@ import { dayOf, fmtDate, fmtDateTime, monthOf } from '../lib/events'
 const ROLE_LABEL = { STUDENT: 'Student', EVENT_HEAD: 'Event head', ADMIN: 'Admin' }
 
 export default function Profile() {
-  const { user, updateName } = useAuth()
+  const { user } = useAuth()
   const { items, loading, error } = useMyRegistrations()
   const [qrFor, setQrFor] = useState(null) // registration whose QR is open
   const now = new Date()
@@ -92,14 +93,14 @@ export default function Profile() {
 
         <aside className="panel aside">
           <h2 className="mb-md">Account</h2>
-          <NameForm current={user.name} onSave={updateName} />
+          <ProfileForm />
           <dl className="defs mt-md">
             <div><dt>Email</dt><dd>{user.email}</dd></div>
             <div><dt>Role</dt><dd>{ROLE_LABEL[user.role] ?? user.role}</dd></div>
             <div><dt>Member since</dt><dd>{fmtDate(new Date(user.createdAt))}</dd></div>
             <div><dt>Events</dt><dd>{upcoming.length} upcoming, {past.length} past</dd></div>
           </dl>
-          <p className="small muted mt-md">Want to change your password? <Link className="text-link" to="/forgot-password">Send a reset link</Link></p>
+          <p className="small muted mt-md">You sign in with Google, so there is no password to manage here.</p>
         </aside>
       </div>
 
@@ -117,34 +118,5 @@ export default function Profile() {
         </Modal>
       )}
     </div>
-  )
-}
-
-function NameForm({ current, onSave }) {
-  const [name, setName] = useState(current ?? '')
-  const [state, setState] = useState({ busy: false, error: '', saved: false })
-
-  async function submit(e) {
-    e.preventDefault()
-    if (!name.trim()) return setState({ busy: false, error: 'Enter your name.', saved: false })
-    setState({ busy: true, error: '', saved: false })
-    try {
-      await onSave(name.trim())
-      setState({ busy: false, error: '', saved: true })
-    } catch (err) {
-      setState({ busy: false, error: err.message, saved: false })
-    }
-  }
-
-  return (
-    <form onSubmit={submit} noValidate>
-      <div className="field">
-        <label htmlFor="pname">Name</label>
-        <input id="pname" autoComplete="name" value={name} onChange={(e) => { setName(e.target.value); setState((s) => ({ ...s, saved: false })) }} />
-      </div>
-      <Alert>{state.error}</Alert>
-      {state.saved && <Alert tone="ok">Saved.</Alert>}
-      <button className="btn btn--sm" type="submit" disabled={state.busy || name.trim() === (current ?? '')}>{state.busy ? 'Saving…' : 'Save name'}</button>
-    </form>
   )
 }

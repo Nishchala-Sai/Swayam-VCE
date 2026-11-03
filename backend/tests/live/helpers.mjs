@@ -7,13 +7,6 @@ import 'dotenv/config'
 import jwt from 'jsonwebtoken'
 
 if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
-// The suites send a dummy CAPTCHA token, which only Cloudflare's always-pass test secret accepts, so a production
-// secret in .env must not be used here
-process.env.TURNSTILE_SECRET = '1x0000000000000000000000000000000AA'
-// Never send real email from the tests: without Brevo credentials email.js logs each message instead, and the
-// password reset checks read the link from that log line
-delete process.env.BREVO_SMTP_USER
-delete process.env.BREVO_SMTP_PASS
 for (const key of ['DATABASE_URL', 'JWT_SECRET', 'QR_SECRET']) {
   if (!process.env[key]) throw new Error(`${key} is not set (backend/.env)`)
 }
@@ -25,6 +18,9 @@ export const { db } = await import('../../src/db/index.js')
 export const schema = await import('../../src/db/schema.js')
 export const tickets = await import('../../src/utils/generateTicket.js')
 const { app } = await import('../../src/app.js')
+
+// The student details every test user needs before they can register (src/modules/auth/profile.js)
+export const PROFILE = { phone: '9876543210', rollNumber: '1602-24-733-001', branch: 'CSE', year: 2 }
 
 export function startServer() {
   const server = app.listen(0)

@@ -2,6 +2,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
+import { isProfileComplete, userColumns } from '../auth/profile.js'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_TEAMMATES = 10
@@ -28,17 +29,22 @@ export function readTeam(body, leaderEmail) {
 }
 
 // Leader first, then teammates in the order given. Every teammate needs an active account, because every row
-// belongs to a user. Returns { members: [{ userId, email, isLeader }] } or { error }.
+// belongs to a user, with a complete profile, so staff have everyone's details. Returns
+// { members: [{ userId, email, isLeader }] } or { error }.
 export async function resolveMembers(leader, team) {
   const members = [{ userId: leader.id, email: leader.email, isLeader: Boolean(team) }]
   if (!team || team.emails.length === 0) return { members } // a team of one (team-competition sessions)
 
   const found = await db
-    .select({ id: users.id, email: users.email })
+    .select(userColumns)
     .from(users)
     .where(and(inArray(users.email, team.emails), eq(users.isActive, true)))
   const missing = team.emails.filter((e) => !found.some((u) => u.email === e))
-  if (missing.length) return { error: `These teammates need a Swayam account first: ${missing.join(', ')}` }
+  if (missing.length) return { error: `These teammates need to sign in to Swayam with Google once first: ${missing.join(', ')}` }
+  const incomplete = found.filter((u) => !isProfileComplete(u)).map((u) => u.email)
+  if (incomplete.length) {
+    return { error: `These teammates need to finish their Swayam profile (phone, roll number, branch, year) first: ${incomplete.join(', ')}` }
+  }
   return {
     members: members.concat(team.emails.map((e) => ({ userId: found.find((u) => u.email === e).id, email: e, isLeader: false }))),
   }

@@ -5,6 +5,7 @@ import { camelRow } from '../../db/fragments.js'
 import { isUuid } from '../../utils/isUuid.js'
 import { generateTicket, generateStandaloneTicket } from '../../utils/generateTicket.js'
 import { readTeam, resolveMembers, readAmount } from './team.js'
+import { PROFILE_REQUIRED } from '../auth/profile.js'
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message })
 
@@ -23,6 +24,7 @@ export const withTicket = (r) =>
 export async function registerForEvent(req, res) {
   const { eventId } = req.params
   if (!isUuid(eventId)) return fail(res, 404, 'Event not found.')
+  if (!req.user.profileComplete) return fail(res, 403, PROFILE_REQUIRED)
 
   const { team, error } = readTeam(req.body, req.user.email)
   if (error) return fail(res, 400, error)

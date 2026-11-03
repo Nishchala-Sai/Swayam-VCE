@@ -10,12 +10,11 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import About from './pages/About'
 import DepartmentDetail from './pages/DepartmentDetail'
-import { Login, Signup } from './pages/Auth'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
+import { Login } from './pages/Auth'
 import Dashboard from './pages/Dashboard'
 import Ticket from './pages/Ticket'
 import Profile from './pages/Profile'
+import Welcome from './pages/Welcome'
 import NotFound from './pages/NotFound'
 
 // The scanner pulls in the camera library, so it is only downloaded by staff who open it
@@ -46,6 +45,15 @@ function RequireRole({ roles, children }) {
   return children
 }
 
+// Signed in but missing student details (phone, roll number, branch, year): every page leads to /welcome until they
+// are filled in, then back to where the person was going
+function ProfileGate() {
+  const { user } = useAuth()
+  const { pathname, search } = useLocation()
+  if (!user || user.profileComplete || pathname === '/welcome') return null
+  return <Navigate to="/welcome" replace state={{ from: pathname + search }} />
+}
+
 // New page: start at the top, unless the link points at a section (#partner)
 function ScrollManager() {
   const { pathname, hash } = useLocation()
@@ -64,6 +72,7 @@ export default function App() {
     <>
       <a className="skip" href="#main">Skip to content</a>
       <ScrollManager />
+      <ProfileGate />
       <Spotlight />
       <Navbar />
       <main id="main">
@@ -77,9 +86,11 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/teams/:departmentId" element={<DepartmentDetail />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/welcome" element={<Welcome />} />
+          {/* Sign-in is Google-only; older links to the password pages land on the sign-in page */}
+          {['/signup', '/forgot-password', '/reset-password'].map((path) => (
+            <Route key={path} path={path} element={<Navigate to="/login" replace />} />
+          ))}
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/tickets/:eventId" element={<RequireAuth><Ticket /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />

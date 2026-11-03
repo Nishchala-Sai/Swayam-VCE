@@ -110,7 +110,7 @@ export default function RegisterModal({ event, registrationId: existingId = null
                 {mates.length < maxMates && (
                   <button type="button" className="link-btn" onClick={addMate}>+ Add another teammate</button>
                 )}
-                <p className="hint">Every teammate needs a Swayam account with this email. Their ticket appears on their own dashboard.</p>
+                <p className="hint">Every teammate needs to have signed in to Swayam once with this Google account. Their ticket appears on their own dashboard.</p>
               </fieldset>
               {paid && (
                 <div className="field team-total" aria-live="polite">
@@ -160,7 +160,8 @@ export default function RegisterModal({ event, registrationId: existingId = null
       {step === 'submitted' && (
         <>
           <h2>Payment submitted</h2>
-          <p>Thanks. The organisers will check your payment against their UPI statement. {teamSize > 1 ? 'Every team member' : 'You'} will see the ticket on their dashboard as soon as it is verified.</p>
+          <p>Thanks. The organisers will check your payment against their UPI statement, usually within a few hours. {teamSize > 1 ? 'Every team member' : 'You'} will see the ticket on their dashboard as soon as it is verified.</p>
+          <p className="small muted">We don't send emails, so check your dashboard for the ticket.</p>
           <div className="actions">
             <Link className="btn" to="/dashboard" onClick={onClose}>Go to your dashboard</Link>
             <button className="btn btn--ghost" onClick={onClose}>Close</button>

@@ -14,12 +14,12 @@
     "db:baseline": "node scripts/baseline-migrations.js",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node scripts/seed-users.js",
+    "login-link": "node scripts/login-link.js",
     "db:seed:demo": "node scripts/seed-demo.js",
     "test:live": "node tests/live/registrations-payments.mjs && node tests/live/sub-events.mjs && node tests/live/auth-extras.mjs && node tests/live/teams-venues.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
-    "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -31,7 +31,6 @@
     "firebase-admin": "^14.5.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^2.5.0",
-    "nodemailer": "^7.0.13"
+    "multer": "^2.5.0"
   }
 }

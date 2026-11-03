@@ -1,5 +1,5 @@
 // The signed-in user. The session itself is the backend's httpOnly cookie, which JavaScript can't read; this context
-// asks GET /api/auth/me on load and after every login, and keeps the answer.
+// asks GET /api/auth/me on load and after every sign-in, and keeps the answer. Sign-in is Google-only.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 
@@ -29,22 +29,13 @@ export function AuthProvider({ children }) {
       user,
       ready,
       refresh,
-      async login(email, password, turnstileToken) {
-        await api('/auth/login', { method: 'POST', body: { email, password, turnstileToken } })
-        return refresh()
-      },
-      async signup(name, email, password, turnstileToken) {
-        await api('/auth/register', { method: 'POST', body: { email, password, turnstileToken } })
-        // The account exists from here; a failed name update shouldn't look like a failed signup
-        if (name) await api('/auth/me', { method: 'PATCH', body: { name } }).catch(() => {})
-        return refresh()
-      },
       async googleLogin(idToken) {
         await api('/auth/google-login', { method: 'POST', body: { idToken } })
         return refresh()
       },
-      async updateName(name) {
-        const me = await api('/auth/me', { method: 'PATCH', body: { name } })
+      // fields: any of { name, phone, rollNumber, branch, year }
+      async updateProfile(fields) {
+        const me = await api('/auth/me', { method: 'PATCH', body: fields })
         setUser(me)
         return me
       },
