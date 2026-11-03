@@ -1,9 +1,10 @@
-// Live suite 4: venues, UPI QR uploads, event schedules, team-competition sessions (teamSize) and auto-grouping.
+// Live suite 4: venues, UPI QR and banner uploads, event schedules, team-competition sessions (teamSize) and
+// auto-grouping, and the attendee CSV export.
 // Run from backend/: npm run test:live
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import jwt from 'jsonwebtoken'
-import { inArray, like } from 'drizzle-orm'
+import { and, eq, inArray, like } from 'drizzle-orm'
 import { db, schema, tickets, startServer, makeClient, makeChecker } from './helpers.mjs'
 import { UPLOAD_DIR } from '../../src/modules/uploads/uploads.controller.js'
 
@@ -16,11 +17,12 @@ const { check, report } = makeChecker()
 const mail = (n) => `team+${tag}-${n}@example.invalid`
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000100ffff03000006000557bfabd40000000049454e44ae426082', 'hex')
 
-async function upload(who, bytes, filename = 'qr.png', type = 'image/png') {
+const auth = (who) => (who ? { cookie: `token=${jwt.sign({ sub: U[who] }, process.env.JWT_SECRET, { expiresIn: '10m' })}` } : {})
+
+async function upload(who, bytes, filename = 'qr.png', type = 'image/png', kind = 'upi-qr') {
   const form = new FormData()
   if (bytes) form.append('file', new Blob([bytes], { type }), filename)
-  const headers = who ? { cookie: `token=${jwt.sign({ sub: U[who] }, process.env.JWT_SECRET, { expiresIn: '10m' })}` } : {}
-  const r = await fetch(`${server.api}/uploads/upi-qr`, { method: 'POST', headers, body: form })
+  const r = await fetch(`${server.api}/uploads/${kind}`, { method: 'POST', headers: auth(who), body: form })
   const body = await r.json()
   if (body.data?.path) uploaded.push(body.data.path)
   return { code: r.status, body }
@@ -239,6 +241,60 @@ try {
   r = await call('head1', 'PATCH', `/events/${E.fest}`, edited)
   check('edit saves title, venue, capacity, teams and a 1-day schedule', r.code === 200 && r.body.data.title === edited.title && r.body.data.location === edited.location && r.body.data.capacity === 120 && r.body.data.maxTeamSize === 3 && r.body.data.schedule.length === 1, r)
   r = await call('admin', 'PATCH', `/events/${E.fest}`, { ...edited, price: 0, upiQrUrl: null }); check('admin can edit any event (made free)', r.code === 200 && r.body.data.price === 0, r)
+
+  console.log('\n== Event banner')
+  const bannerUpload = (who, bytes) => upload(who, bytes, 'banner.png', 'image/png', 'banner')
+  r = await bannerUpload('a1', PNG); check('student cannot upload a banner -> 403', r.code === 403, r)
+  r = await bannerUpload('head1', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)])); check('banner over 5 MB -> 400', r.code === 400 && /5 MB/.test(r.body.message), r)
+  r = await bannerUpload('head1', Buffer.from('GIF89a')); check('non-image banner -> 400', r.code === 400 && /banner/i.test(r.body.message), r)
+  r = await bannerUpload('head1', PNG); const bannerPath = r.body.data?.path
+  check('banner upload returns its path', r.code === 201 && (process.env.CLOUDINARY_URL ? /\/swayam\/banner\/[0-9a-f-]{36}\.png$/ : /^\/api\/uploads\/banner\/[0-9a-f-]{36}\.png$/).test(bannerPath), r)
+  const bannerEvent = { ...base, title: `TEAM TEST banner ${tag}`, schedule: undefined }
+  r = await call('head1', 'POST', '/events', { ...bannerEvent, bannerUrl: '/api/uploads/banner/../../secret.png' }); check('bannerUrl not an upload or https -> 400', r.code === 400, r)
+  r = await call('head1', 'POST', '/events', { ...bannerEvent, bannerUrl: bannerPath }); E.banner = r.body.data?.id; if (E.banner) eventIds.push(E.banner)
+  check('event saves bannerUrl', r.code === 201 && r.body.data.bannerUrl === bannerPath, r)
+  r = await call(null, 'GET', `/events/${E.banner}`); check('public event page data includes bannerUrl', r.body.data?.bannerUrl === bannerPath, r)
+  r = await call(null, 'GET', `/events/${E.fest}`); check('event without a banner has bannerUrl null', r.code === 200 && r.body.data.bannerUrl === null, r)
+
+  console.log('\n== UPI ID and payee name per event')
+  r = await call('head1', 'POST', '/events', { ...bannerEvent, upiId: 'not a upi id' }); check('upiId without @bank -> 400', r.code === 400 && /upiId/.test(r.body.message), r)
+  r = await call('head1', 'POST', '/events', { ...bannerEvent, upiPayeeName: 'x'.repeat(101) }); check('payee name over 100 characters -> 400', r.code === 400, r)
+  r = await call('head1', 'PATCH', `/events/${E.banner}`, { ...bannerEvent, bannerUrl: bannerPath, upiId: ' swayam.ecell@okaxis ', upiPayeeName: ' Swayam E-Cell ' })
+  check('edit saves upiId and upiPayeeName, trimmed', r.code === 200 && r.body.data.upiId === 'swayam.ecell@okaxis' && r.body.data.upiPayeeName === 'Swayam E-Cell', r)
+  r = await call(null, 'GET', '/events'); const listed = r.body.data?.find((e) => e.id === E.banner)
+  check('public event list carries the UPI details', listed?.upiId === 'swayam.ecell@okaxis' && listed.upiPayeeName === 'Swayam E-Cell', r)
+  r = await call(null, 'GET', `/events/${E.fest}`); check('events without them have null', r.body.data?.upiId === null && r.body.data.upiPayeeName === null, r)
+
+  console.log('\n== Attendee CSV export')
+  await db.insert(registrations).values([
+    { userId: U.x1, eventId: E.banner, paymentStatus: 'VERIFIED', attendedAt: new Date('2026-12-01T05:02:00Z') },
+    { userId: U.x2, eventId: E.banner, paymentStatus: 'PENDING' },
+  ])
+  const [regX1] = await db.select({ id: registrations.id }).from(registrations).where(and(eq(registrations.eventId, E.banner), eq(registrations.userId, U.x1)))
+  await db.update(users).set({ name: '=HYPERLINK("http://x")' }).where(eq(users.id, U.x2))
+  const exportCsv = (who, id = E.banner) => fetch(`${server.api}/events/${id}/export`, { headers: auth(who) })
+  let res = await exportCsv(null); check('logged out -> 401', res.status === 401)
+  res = await exportCsv('a1'); check('student cannot export -> 403', res.status === 403)
+  res = await exportCsv('head2'); check("another event head can't export it -> 403", res.status === 403)
+  res = await exportCsv('admin', '00000000-0000-0000-0000-000000000000'); check('unknown event -> 404', res.status === 404)
+  res = await exportCsv('admin'); check('admin can export any event', res.status === 200)
+  res = await exportCsv('head1')
+  check('own event head gets a CSV attachment', res.status === 200 && res.headers.get('content-type').startsWith('text/csv') && /^attachment; filename="TEAM TEST banner \d+ attendees\.csv"/.test(res.headers.get('content-disposition')))
+  const bytes = Buffer.from(await res.arrayBuffer()) // res.text() would drop the byte-order mark
+  check('starts with a UTF-8 byte-order mark for Excel', bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])))
+  const csv = bytes.subarray(3).toString('utf8')
+  const lines = csv.split('\r\n')
+  check('header row', lines[0] === '"Student Name","Email","Registration Code","Payment Status","Check-in Time (IST)"', { code: 200, body: { message: lines[0] } })
+  check('checked-in student: code and IST check-in time', lines.includes(`"x1 T","${mail('x1')}","${regX1.id.slice(0, 8).toUpperCase()}","VERIFIED","2026-12-01 10:32"`), { code: 200, body: { message: csv } })
+  check('not checked in: Not Attended; formula-like name neutralised', lines.some((l) => l.startsWith(`"'=HYPERLINK(""http://x"")","${mail('x2')}"`) && l.endsWith('"PENDING","Not Attended"')), { code: 200, body: { message: csv } })
+  check('one row per registration', lines.length === 3)
+
+  if (!process.env.CLOUDINARY_URL) {
+    const origin = server.api.replace(/\/api$/, '')
+    check('banner image is served', (await fetch(origin + bannerPath)).status === 200)
+    r = await call('head1', 'PATCH', `/events/${E.banner}`, bannerEvent); check('editing without a banner removes it', r.code === 200 && r.body.data.bannerUrl === null, r)
+    check('the removed banner file is deleted', (await fetch(origin + bannerPath)).status === 404)
+  }
 } catch (err) {
   check(`unexpected error: ${err.message}`, false)
 } finally {

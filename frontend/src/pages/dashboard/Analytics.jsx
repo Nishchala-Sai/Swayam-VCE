@@ -2,7 +2,8 @@
 // main-entrance check-in log, and booked vs attended for every session, with the teams of team competitions.
 // While the tab is open it refreshes every 30 seconds, so it can stay up on a laptop at the door.
 import { useEffect, useMemo, useState } from 'react'
-import { Empty } from '../../components/ui'
+import { download } from '../../api/client'
+import { Alert, Empty } from '../../components/ui'
 import { fmtRange, rupees } from '../../lib/events'
 import { Stat } from './ManageEvent'
 
@@ -25,6 +26,18 @@ function downloadCsv(name, rows) {
 export default function Analytics({ event, a, onRefresh }) {
   const [query, setQuery] = useState('')
   const [updated, setUpdated] = useState(() => new Date())
+  const [csv, setCsv] = useState({ busy: false, error: '' })
+
+  // Everyone registered, built by the server (GET /api/events/:id/export)
+  async function exportAttendees() {
+    setCsv({ busy: true, error: '' })
+    try {
+      await download(`/events/${event.key}/export`, `${event.name} attendees.csv`)
+      setCsv({ busy: false, error: '' })
+    } catch (err) {
+      setCsv({ busy: false, error: err.message })
+    }
+  }
 
   useEffect(() => {
     const id = setInterval(() => { onRefresh(); setUpdated(new Date()) }, REFRESH_MS)
@@ -49,6 +62,11 @@ export default function Analytics({ event, a, onRefresh }) {
           Updates every 30 seconds · last {updated.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}{' '}
           <button className="link-btn small accent" onClick={() => { onRefresh(); setUpdated(new Date()) }}>Refresh now</button>
         </p>
+        <div className="actions">
+          <button className="btn btn--sm" disabled={csv.busy} onClick={exportAttendees}>{csv.busy ? 'Preparing…' : 'Download CSV'}</button>
+          <span className="small muted">Everyone registered: name, email, registration code, payment status and check-in time.</span>
+        </div>
+        <Alert>{csv.error}</Alert>
       </section>
 
       <section aria-labelledby="log-title">
@@ -56,7 +74,7 @@ export default function Analytics({ event, a, onRefresh }) {
           <h3 id="log-title">Check-in log <span className="muted small">({a.checkIns.length})</span></h3>
           <div className="actions mt-0">
             <input className="log-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, email or ticket" aria-label="Search the check-in log" />
-            <button className="btn btn--sm btn--ghost" disabled={!a.checkIns.length} onClick={() => downloadCsv(`${event.name} check-ins.csv`, a.checkIns)}>Export CSV</button>
+            <button className="btn btn--sm btn--ghost" disabled={!a.checkIns.length} onClick={() => downloadCsv(`${event.name} check-ins.csv`, a.checkIns)}>Export check-ins</button>
           </div>
         </div>
         {a.checkIns.length === 0 ? (

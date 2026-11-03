@@ -4,17 +4,18 @@ import { events } from '../../db/schema.js'
 import { isUuid } from '../../utils/isUuid.js'
 import { isHttpsUrl } from '../../utils/isHttpsUrl.js'
 import { readSchedule } from '../../utils/schedule.js'
-import { isUploadedQr, removeUploadedQr } from '../uploads/uploads.controller.js'
+import { isUploaded, removeUploaded } from '../uploads/uploads.controller.js'
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message })
 
 const isText = (v, max) => typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max
 const isWholeNumber = (v, min, max) => Number.isInteger(v) && v >= min && v <= max
+const UPI_ID = /^(?=.{3,100}$)[\w.-]+@[a-z][a-z0-9.-]*$/i
 
 // Returns { values } ready to insert, or { error } with a message for the admin.
 // Only known fields are copied, so a client can never set id, createdBy or createdAt.
 function readEvent(body) {
-  const { title, description, date, location, capacity, price = 0, upiQrUrl, paymentInstructions, schedule, groupSize, groupPrice, maxTeamSize } = body ?? {}
+  const { title, description, date, location, capacity, price = 0, upiQrUrl, upiId, upiPayeeName, bannerUrl, paymentInstructions, schedule, groupSize, groupPrice, maxTeamSize } = body ?? {}
 
   if (!isText(title, 200)) return { error: 'title is required (up to 200 characters).' }
   if (!isText(description, 10000)) return { error: 'description is required (up to 10,000 characters).' }
@@ -24,10 +25,19 @@ function readEvent(body) {
   if (!isWholeNumber(capacity, 1, 100000)) return { error: 'capacity must be a whole number from 1 to 100000.' }
   if (!isWholeNumber(price, 0, 100000)) return { error: 'price must be a whole number of rupees from 0 to 100000.' }
   // Either an image uploaded through POST /api/uploads/upi-qr, or an https link
-  if (upiQrUrl != null && !isHttpsUrl(upiQrUrl) && !isUploadedQr(upiQrUrl)) {
+  if (upiQrUrl != null && !isHttpsUrl(upiQrUrl) && !isUploaded('upi-qr', upiQrUrl)) {
     return { error: 'upiQrUrl must be an uploaded QR image or an https URL.' }
   }
   if (price > 0 && upiQrUrl == null) return { error: 'upiQrUrl is required for paid events.' }
+  // A UPI ID (VPA) is handle@bank: letters, digits, dots, hyphens and underscores, then the bank's handle
+  if (upiId != null && !(typeof upiId === 'string' && UPI_ID.test(upiId.trim()))) {
+    return { error: 'upiId must be a UPI ID like swayam@okaxis (up to 100 characters).' }
+  }
+  if (upiPayeeName != null && !isText(upiPayeeName, 100)) return { error: 'upiPayeeName must be text up to 100 characters.' }
+  // Optional; an image uploaded through POST /api/uploads/banner, or an https link
+  if (bannerUrl != null && !isHttpsUrl(bannerUrl) && !isUploaded('banner', bannerUrl)) {
+    return { error: 'bannerUrl must be an uploaded banner image or an https URL.' }
+  }
   const offer = readGroupOffer(groupSize, groupPrice, price)
   if (offer.error) return { error: offer.error }
   if (maxTeamSize != null && !isWholeNumber(maxTeamSize, 2, 11)) {
@@ -54,6 +64,9 @@ function readEvent(body) {
       groupPrice: offer.groupPrice,
       maxTeamSize: maxTeamSize ?? null,
       upiQrUrl: upiQrUrl ?? null,
+      upiId: upiId?.trim() || null,
+      upiPayeeName: upiPayeeName?.trim() || null,
+      bannerUrl: bannerUrl ?? null,
       paymentInstructions: paymentInstructions?.trim() ?? null,
       schedule: days,
     },
@@ -112,7 +125,7 @@ export async function getAllEvents(req, res) {
 // PATCH /api/events/:id: the same body as creating, every field sent again (ADMIN, or the EVENT_HEAD who created it).
 // Registrations already made keep the amount they paid; new prices, team rules and the schedule apply from now on.
 // Capacity may go below the seats taken, as with PATCH /:id/capacity: nobody loses a seat, new registrations wait.
-// A replaced uploaded QR image is deleted once no event uses it.
+// A replaced uploaded QR or banner image is deleted once no event uses it.
 export async function updateEvent(req, res) {
   if (!isUuid(req.params.id)) return fail(res, 404, 'Event not found.')
   const [event] = await db.select().from(events).where(eq(events.id, req.params.id)).limit(1)
@@ -123,7 +136,8 @@ export async function updateEvent(req, res) {
 
   const [updated] = await db.update(events).set(values).where(eq(events.id, event.id)).returning()
   if (!updated) return fail(res, 404, 'Event not found.')
-  if (event.upiQrUrl && event.upiQrUrl !== updated.upiQrUrl) await removeUploadedQr(event.upiQrUrl)
+  if (event.upiQrUrl && event.upiQrUrl !== updated.upiQrUrl) await removeUploaded('upi-qr', event.upiQrUrl)
+  if (event.bannerUrl && event.bannerUrl !== updated.bannerUrl) await removeUploaded('banner', event.bannerUrl)
   res.json({ success: true, data: updated })
 }
 
@@ -167,7 +181,9 @@ export async function deleteEvent(req, res) {
   ])
   if (!results.at(-1).rows.length) return fail(res, 409, 'Someone registered for this event just now, so it was not deleted.')
 
-  await removeUploadedQr(event.upiQrUrl) // only if no other event uses the same image
+  // Only if no other event uses the same image
+  await removeUploaded('upi-qr', event.upiQrUrl)
+  await removeUploaded('banner', event.bannerUrl)
   res.json({ success: true, data: { id, title: event.title, deleted: { registrations: regCount, bookings: bookingCount } } })
 }
 

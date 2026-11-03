@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.6 (November 2026): banners, CSV export, per-event UPI, Brevo
+- Event banners: optional image uploaded in the event form (`POST /api/uploads/banner`, Cloudinary, up to 5 MB),
+  shown at the top of the event page. New column `events.banner_url`.
+- Attendee CSV export: `GET /api/events/:eventId/export` (admins, event heads for their own events) and a Download CSV
+  button in the Analytics tab. Name, email, registration code, payment status, check-in time or Not Attended.
+- UPI ID and payee name per event (`events.upi_id`, `events.upi_payee_name`), set in the event form and shown on the
+  event page and in the payment step with a copy button. `UPI_ID` and `UPI_PAYEE_NAME` removed from the environment.
+- Email switched from Resend to Brevo SMTP (nodemailer, `smtp-relay.brevo.com:587`): `BREVO_SMTP_USER`,
+  `BREVO_SMTP_PASS`, `EMAIL_FROM`. `RESEND_API_KEY` removed.
+- The old three-service backend (`backend/services/`) moved out of the repo to `Desktop/swayam-archive/`.
+- Live tests: 301 checks in 4 suites. The suites always use Cloudflare's test Turnstile secret.
+- Versioned migrations: `drizzle/0000_init.sql`, `npm run db:generate` / `db:migrate` replace `db:push`. The existing
+  Neon database is baselined (`npm run db:baseline`). `drizzle-kit` is now a runtime dependency so Render can migrate on start.
+- Deployment: `frontend/vercel.json` (proxies `/api` to Render, SPA fallback) and `docs/DEPLOYMENT.md`.
+
 ## v3.5 (October 2026): launch fixes and analytics
 - Uploaded QR images go to Cloudinary (CLOUDINARY_URL); local disk only in development.
 - Emails through Resend: password reset links, and "your ticket is ready" when a payment is approved.

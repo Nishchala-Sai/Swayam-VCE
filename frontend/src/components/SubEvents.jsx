@@ -208,6 +208,8 @@ function BookModal({ event, sub, passHolder, startAt, existingId, existingAmount
           id={bookingId}
           amount={amount}
           upiQrUrl={event.raw?.upiQrUrl}
+          upiId={event.raw?.upiId}
+          upiPayeeName={event.raw?.upiPayeeName}
           instructions={event.raw?.paymentInstructions}
           onSubmitted={() => { onChanged(); setStep('submitted') }}
           onLater={onClose}

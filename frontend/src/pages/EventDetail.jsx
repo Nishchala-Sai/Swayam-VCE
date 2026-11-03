@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, assetUrl } from '../api/client'
 import RegisterModal from '../components/RegisterModal'
 import SubEvents from '../components/SubEvents'
 import { Alert, Crumbs, Loading, Modal, Pill, SeatBar, toneForSeats } from '../components/ui'
@@ -289,6 +289,10 @@ function LiveEvent({ id }) {
         {e.venue && <Pill>{e.venue}</Pill>}
       </div>
 
+      {e.raw.bannerUrl && (
+        <div className="detail-hero"><img src={assetUrl(e.raw.bannerUrl)} alt={`${e.name} banner`} /></div>
+      )}
+
       <div className="split">
         <article className="prose">
           <h2>About</h2>
@@ -302,6 +306,12 @@ function LiveEvent({ id }) {
                 UPI transaction reference (UTR). Your seat is held while the organisers verify the payment, and your
                 ticket appears on your dashboard once it is confirmed.
               </p>
+              {e.raw.upiId && (
+                <p>
+                  UPI ID: <span className="mono">{e.raw.upiId}</span>
+                  {e.raw.upiPayeeName && <> (payee name <b>{e.raw.upiPayeeName}</b>)</>}
+                </p>
+              )}
               {e.raw.paymentInstructions && <p>{e.raw.paymentInstructions}</p>}
             </>
           )}

@@ -399,6 +399,7 @@ a.card:hover { border-color: #555; }
 .mate-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .mate-row input { min-width: 0; }
 .upi-qr { background: #fff; border-radius: var(--radius-sm); padding: 12px; max-width: 220px; margin: 0 auto 16px; }
+.upi-id { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; text-align: center; overflow-wrap: anywhere; }
 
 /* Dashboards (/dashboard): stat tiles, staff tables and forms */
 .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
@@ -460,6 +461,8 @@ textarea { resize: vertical; }
 }
 .qr-upload { display: flex; align-items: center; gap: 16px; }
 .qr-upload img { width: 120px; height: 120px; object-fit: contain; background: #fff; border-radius: var(--radius-sm); padding: 6px; }
+.banner-upload { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.banner-upload img { width: min(420px, 100%); aspect-ratio: 3 / 1; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--line); background: #0d0d0d; }
 .inline-form--wide input { width: min(360px, 100%); }
 .venue-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); max-width: 560px; }
 .venue-list li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }

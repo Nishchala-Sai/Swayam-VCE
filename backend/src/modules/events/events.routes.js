@@ -5,6 +5,7 @@ import { createEvent, updateEvent, updateCapacity, getAllEvents, getEventById, d
 import { createSubEvent, updateSubEvent, deleteSubEvent, listSubEvents, updateSubEventCapacity, getEventAnalytics } from './subEvents.controller.js'
 import { getAvailability } from './availability.controller.js'
 import { autoGroup, listTeams } from './teams.controller.js'
+import { exportAttendees } from './export.controller.js'
 
 const router = Router()
 
@@ -14,6 +15,7 @@ const staff = [requireAuth, requireRole(['ADMIN', 'EVENT_HEAD'])]
 router.post('/', ...staff, createEvent)
 router.patch('/:id/capacity', ...staff, updateCapacity)
 router.get('/:id/analytics', ...staff, getEventAnalytics)
+router.get('/:eventId/export', ...staff, exportAttendees)
 router.post('/:eventId/sub-events', ...staff, createSubEvent)
 router.get('/:eventId/sub-events', listSubEvents)
 router.patch('/:eventId/sub-events/:subEventId/capacity', ...staff, updateSubEventCapacity)

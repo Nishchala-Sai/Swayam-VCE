@@ -23,7 +23,7 @@ async function call(method, path, body, { cookie, ip = freshIp() } = {}) {
   return { code: r.status, body: await r.json(), cookie: r.headers.get('set-cookie')?.split(';')[0] }
 }
 
-// Without RESEND_API_KEY the reset email is printed with console.log; capture it while the request runs
+// Without BREVO_SMTP_USER/BREVO_SMTP_PASS the reset email is printed with console.log; capture it while the request runs
 async function requestReset(email) {
   const original = console.log
   let link = null

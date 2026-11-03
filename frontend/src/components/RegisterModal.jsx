@@ -149,6 +149,8 @@ export default function RegisterModal({ event, registrationId: existingId = null
           id={registrationId}
           amount={expected}
           upiQrUrl={event.raw?.upiQrUrl}
+          upiId={event.raw?.upiId}
+          upiPayeeName={event.raw?.upiPayeeName}
           instructions={event.raw?.paymentInstructions}
           onSubmitted={() => { onChanged?.(); setStep('submitted') }}
           onLater={onClose}
