@@ -5,7 +5,7 @@ The API runs on **Render** (a Node web service), the site on **Vercel**, the dat
 
 ```
 browser ──> https://<site>.vercel.app ──┬── static site (frontend/dist)
-                                        └── /api/*  ──rewrite──> https://swayam-api.onrender.com/api/*  ──> Neon
+                                        └── /api/*  ──rewrite──> https://swayam-vce.onrender.com/api/*  ──> Neon
 ```
 
 Vercel forwards every `/api/...` request to Render (`frontend/vercel.json`). The browser only ever talks to the Vercel
@@ -31,7 +31,7 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
 
    | Setting | Value |
    |---|---|
-   | Name | `swayam-api` (gives `https://swayam-api.onrender.com`; if the name is taken, update `frontend/vercel.json`) |
+   | Name | `Swayam-VCE` (gives `https://swayam-vce.onrender.com`; if the name is taken, update `frontend/vercel.json`) |
    | Branch | `main` |
    | Root Directory | `backend` |
    | Runtime | Node |
@@ -63,12 +63,12 @@ domain, so the login cookie is first-party there, and `VITE_API_URL` stays empty
    | `TRUST_PROXY` | `2`: requests pass through Vercel's proxy and then Render's. Rate limits key on the client IP and are wrong with any other value |
 
    Don't set `PORT` (Render sets it) or `UPLOAD_DIR` (Cloudinary is used).
-4. **Create Web Service**. When the deploy is live, open `https://swayam-api.onrender.com/health`: it must answer
+4. **Create Web Service**. When the deploy is live, open `https://swayam-vce.onrender.com/health`: it must answer
    `{"success":true,"data":{"status":"ok"}}`. The log shows `migrations applied successfully!` before the server starts.
 
 ## 3. Frontend on Vercel
 
-1. Check `frontend/vercel.json` points at your Render URL (`https://swayam-api.onrender.com` by default). It sends
+1. Check `frontend/vercel.json` points at your Render URL (`https://swayam-vce.onrender.com` by default). It sends
    `/api/*` to Render and every other path to `index.html`, so links like `/events/upcoming` work on refresh.
 2. Vercel dashboard > **Add New > Project** > import `Swayam-VCE`.
 3. Settings:
