@@ -37,7 +37,9 @@ export async function googleLogin(req, res) {
   let decoded
   try {
     decoded = await auth.verifyIdToken(idToken)
-  } catch {
+  } catch (err) {
+    // Logged without the token. auth/argument-error with "aud" usually means FIREBASE_PROJECT_ID doesn't match the frontend's
+    console.warn(`[google sign-in rejected] ${err.code ?? 'error'}: ${err.message}`)
     return fail(res, 401, 'Google sign-in failed. Please try again.') // expired, forged, or for another project
   }
   if (decoded.firebase?.sign_in_provider !== 'google.com') return fail(res, 401, 'Use a Google account to sign in here.')
