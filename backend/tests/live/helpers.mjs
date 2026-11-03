@@ -19,6 +19,9 @@ export const schema = await import('../../src/db/schema.js')
 export const tickets = await import('../../src/utils/generateTicket.js')
 const { app } = await import('../../src/app.js')
 
+// The student details every test user needs before they can register (src/modules/auth/profile.js)
+export const PROFILE = { phone: '9876543210', rollNumber: '1602-24-733-001', branch: 'CSE', year: 2 }
+
 export function startServer() {
   const server = app.listen(0)
   return { api: `http://localhost:${server.address().port}/api`, close: () => server.close() }

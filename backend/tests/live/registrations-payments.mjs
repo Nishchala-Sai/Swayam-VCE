@@ -1,7 +1,7 @@
 // Live suite 1: team registration, payment proof, EVENT_HEAD scope, capacity and refund overflow, main tickets,
 // re-registering, reject-remaining, and race conditions. Run from backend/: npm run test:live
 import { inArray } from 'drizzle-orm'
-import { db, schema, tickets, startServer, makeClient, makeChecker } from './helpers.mjs'
+import { db, schema, tickets, startServer, makeClient, makeChecker, PROFILE } from './helpers.mjs'
 
 const { users, events, registrations } = schema
 const { verifyTicket } = tickets
@@ -17,7 +17,7 @@ const ev = async (key, by, capacity, price) => {
 }
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'], ...Array.from({ length: 8 }, (_, i) => [`s${i + 1}`, 'STUDENT']), ...Array.from({ length: 8 }, (_, i) => [`r${i + 1}`, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role, ...PROFILE }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
   await ev('paidA', 'head1', 4, 100); await ev('free', 'admin', 10, 0); await ev('paidB', 'head2', 5, 100); await ev('race', 'admin', 5, 0); await ev('raceApprove', 'admin', 2, 50)
 

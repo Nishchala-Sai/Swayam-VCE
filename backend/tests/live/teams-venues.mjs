@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import jwt from 'jsonwebtoken'
 import { and, eq, inArray, like } from 'drizzle-orm'
-import { db, schema, tickets, startServer, makeClient, makeChecker } from './helpers.mjs'
+import { db, schema, tickets, startServer, makeClient, makeChecker, PROFILE } from './helpers.mjs'
 import { UPLOAD_DIR } from '../../src/modules/uploads/uploads.controller.js'
 
 const { users, events, registrations, subEvents, subEventBookings, venues } = schema
@@ -32,7 +32,7 @@ const book = (who, body) => call(who, 'POST', '/registrations/book-sub-event', b
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'],
     ...['a1', 'a2', 'b1', 'c1', 'd1', 'd2', 'd3', 'e1', 'e2', 'p1', 'x1', 'x2', 'x3', 'x4'].map((n) => [n, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role, ...PROFILE }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
 
   console.log('\n== Venues')
@@ -284,8 +284,9 @@ try {
   check('starts with a UTF-8 byte-order mark for Excel', bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])))
   const csv = bytes.subarray(3).toString('utf8')
   const lines = csv.split('\r\n')
-  check('header row', lines[0] === '"Student Name","Email","Registration Code","Payment Status","Check-in Time (IST)"', { code: 200, body: { message: lines[0] } })
-  check('checked-in student: code and IST check-in time', lines.includes(`"x1 T","${mail('x1')}","${regX1.id.slice(0, 8).toUpperCase()}","VERIFIED","2026-12-01 10:32"`), { code: 200, body: { message: csv } })
+  check('header row', lines[0] === '"Student Name","Email","Phone","Roll Number","Branch","Year","Registration Code","Payment Status","Check-in Time (IST)"', { code: 200, body: { message: lines[0] } })
+  const details = `"${PROFILE.phone}","${PROFILE.rollNumber}","${PROFILE.branch}","${PROFILE.year}"`
+  check('checked-in student: profile, code and IST check-in time', lines.includes(`"x1 T","${mail('x1')}",${details},"${regX1.id.slice(0, 8).toUpperCase()}","VERIFIED","2026-12-01 10:32"`), { code: 200, body: { message: csv } })
   check('not checked in: Not Attended; formula-like name neutralised', lines.some((l) => l.startsWith(`"'=HYPERLINK(""http://x"")","${mail('x2')}"`) && l.endsWith('"PENDING","Not Attended"')), { code: 200, body: { message: csv } })
   check('one row per registration', lines.length === 3)
 

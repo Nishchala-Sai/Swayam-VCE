@@ -5,6 +5,7 @@ import { events, registrations, subEventBookings, subEvents } from '../../db/sch
 import { camelRow } from '../../db/fragments.js'
 import { isUuid } from '../../utils/isUuid.js'
 import { readTeam, resolveMembers, readAmount } from './team.js'
+import { PROFILE_REQUIRED } from '../auth/profile.js'
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message })
 
@@ -21,6 +22,7 @@ const fail = (res, status, message) => res.status(status).json({ success: false,
 export async function bookSubEvent(req, res) {
   const { subEventId } = req.body ?? {}
   if (!isUuid(subEventId)) return fail(res, 400, 'subEventId must be a valid sub-event id.')
+  if (!req.user.profileComplete) return fail(res, 403, PROFILE_REQUIRED)
   const [sub] = await db.select().from(subEvents).where(eq(subEvents.id, subEventId)).limit(1)
   if (!sub) return fail(res, 404, 'Sub-event not found.')
 

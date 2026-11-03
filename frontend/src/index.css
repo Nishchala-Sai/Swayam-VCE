@@ -88,6 +88,9 @@ main, footer { position: relative; z-index: 1; }
 .field { margin-bottom: 18px; }
 .field label { display: block; font-size: .95rem; color: var(--mute); margin-bottom: 6px; }
 .field .hint { font-size: .85rem; color: var(--mute); margin: 6px 0 0; }
+.field .hint--error { color: var(--danger); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+@media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
 input, textarea, select {
   width: 100%; padding: 13px 14px; background: var(--bg); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); color: var(--fg); font: inherit;

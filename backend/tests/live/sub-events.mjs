@@ -1,7 +1,7 @@
 // Live suite 2: sub-events and pass-holder pricing, bookings and their payments, the one-pass master ticket, check-in
 // at the main gate and sub-events, analytics, refunds, and race conditions. Run from backend/: npm run test:live
 import { inArray, eq } from 'drizzle-orm'
-import { db, schema, tickets, startServer, makeClient, makeChecker } from './helpers.mjs'
+import { db, schema, tickets, startServer, makeClient, makeChecker, PROFILE } from './helpers.mjs'
 
 const { users, events, registrations, subEvents, subEventBookings } = schema
 const { generateTicket, generateStandaloneTicket } = tickets
@@ -16,7 +16,7 @@ let subIds = []
 try {
   const people = [['admin', 'ADMIN'], ['head1', 'EVENT_HEAD'], ['head2', 'EVENT_HEAD'],
     ...['p1', 'p2', 's1', 's2', 's3', 's4', 'w1', 'nobody', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'c1', 'c2', 'c3', 'c4', 'c5', 'late'].map((n) => [n, 'STUDENT'])]
-  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), role }))).returning({ id: users.id, email: users.email })
+  const made = await db.insert(users).values(people.map(([n, role]) => ({ email: mail(n), name: `${n} T`, role, ...PROFILE }))).returning({ id: users.id, email: users.email })
   for (const [n] of people) { U[n] = made.find((u) => u.email === mail(n)).id; userIds.push(U[n]) }
   const evs = await db.insert(events).values([
     { title: `SUB TEST fest ${tag}`, description: 't', date: new Date(Date.now() + 864e5), location: 't', capacity: 50, price: 200, upiQrUrl: 'https://example.invalid/qr.png', createdBy: U.head1 },

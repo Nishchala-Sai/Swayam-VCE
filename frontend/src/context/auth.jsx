@@ -33,8 +33,9 @@ export function AuthProvider({ children }) {
         await api('/auth/google-login', { method: 'POST', body: { idToken } })
         return refresh()
       },
-      async updateName(name) {
-        const me = await api('/auth/me', { method: 'PATCH', body: { name } })
+      // fields: any of { name, phone, rollNumber, branch, year }
+      async updateProfile(fields) {
+        const me = await api('/auth/me', { method: 'PATCH', body: fields })
         setUser(me)
         return me
       },

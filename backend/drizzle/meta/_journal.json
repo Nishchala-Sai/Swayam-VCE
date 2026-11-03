@@ -15,6 +15,13 @@
       "when": 1793727515501,
       "tag": "0001_google_only_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793728007521,
+      "tag": "0002_student_profile",
+      "breakpoints": true
     }
   ]
 }

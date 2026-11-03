@@ -43,6 +43,20 @@ try {
   r = await call('PATCH', '/auth/me', { name: '  Anika Rao ' }, { cookie: cookieA }); check('set name (trimmed)', r.code === 200 && r.body.data.name === 'Anika Rao', r)
   r = await call('GET', '/auth/me', null, { cookie: cookieA }); check('GET /me includes name, never a password hash', r.code === 200 && r.body.data.name === 'Anika Rao' && !('passwordHash' in r.body.data), r)
 
+  console.log('\n== Student profile (phone, roll number, branch, year)')
+  check('a new account starts incomplete', r.body.data.profileComplete === false && r.body.data.phone === null, r)
+  const bad = [
+    [{ phone: '12345' }, 'short phone'], [{ phone: '5876543210' }, 'phone not starting 6-9'], [{ phone: '98765432100' }, '11-digit phone'],
+    [{ rollNumber: 'x' }, 'roll number under 3 characters'], [{ rollNumber: '<script>' }, 'roll number with symbols'],
+    [{ branch: 'C' }, 'one-letter branch'], [{ year: 5 }, 'year 5'], [{ year: '2' }, 'year as text'], [{}, 'empty body'],
+  ]
+  for (const [body, label] of bad) {
+    r = await call('PATCH', '/auth/me', body, { cookie: cookieA }); check(`${label} -> 400`, r.code === 400, r)
+  }
+  r = await call('PATCH', '/auth/me', { phone: '+91 98765-43210', rollNumber: ' 1602-23-733-042 ', branch: ' CSE  (AI & ML) ', year: 3 }, { cookie: cookieA })
+  check('save profile: phone normalised to 10 digits, text trimmed, complete', r.code === 200 && r.body.data.phone === '9876543210' && r.body.data.rollNumber === '1602-23-733-042' && r.body.data.branch === 'CSE (AI & ML)' && r.body.data.year === 3 && r.body.data.profileComplete === true, r)
+  r = await call('PATCH', '/auth/me', { phone: '09876501234' }, { cookie: cookieA }); check('only the fields sent change', r.code === 200 && r.body.data.phone === '9876501234' && r.body.data.year === 3, r)
+
   console.log('\n== Password sign-in is gone')
   for (const path of ['/auth/register', '/auth/login', '/auth/forgot-password', '/auth/reset-password']) {
     r = await call('POST', path, { email: mail('a'), password: 'whatever-123' })
@@ -95,6 +109,13 @@ try {
   const mine = r.body.data?.find((x) => x.eventId === ev.id)
   check('public, counts only CONFIRMED seats', r.code === 200 && mine?.capacity === 5 && mine.seatsTaken === 1 && mine.seatsLeft === 4, r)
   r = await call('GET', `/events/${ev.id}`); check('GET /events/:id still works next to /availability', r.code === 200 && r.body.data.id === ev.id, r)
+
+  console.log('\n== Registering needs a complete profile')
+  const [d] = await db.insert(users).values({ email: mail('d'), name: 'Dev Shah' }).returning({ id: users.id })
+  userIds.push(d.id)
+  r = await call('POST', `/registrations/${ev.id}`, {}, { cookie: session(d.id) }); check('incomplete profile -> 403, asks for the profile', r.code === 403 && /profile/i.test(r.body.message), r)
+  r = await call('POST', '/registrations/book-sub-event', { subEventId: '00000000-0000-0000-0000-000000000000' }, { cookie: session(d.id) }); check('session booking with incomplete profile -> 403', r.code === 403, r)
+  r = await call('POST', `/registrations/${ev.id}`, {}, { cookie: cookieA }); check('complete profile -> registered', r.code === 201, r)
 } catch (err) {
   check(`suite crashed: ${err.message}`, false)
   console.error(err)

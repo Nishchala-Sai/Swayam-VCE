@@ -11,10 +11,15 @@ export const users = pgTable('users', {
   // Unused since sign-in became Google-only (migration 0001 made it nullable and cleared every hash). Kept for now so
   // a deploy never runs code that expects the column against a database without it; safe to drop in a later release.
   passwordHash: varchar('password_hash', { length: 255 }),
+  // Student details, required before registering (src/modules/auth/profile.js). Null until the person fills them in.
+  phone: varchar('phone', { length: 10 }), // Indian mobile, 10 digits, no country code
+  rollNumber: varchar('roll_number', { length: 30 }),
+  branch: varchar('branch', { length: 60 }),
+  year: integer('year'),
   role: userRole('role').notNull().default('STUDENT'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (t) => [check('users_year_range', sql`${t.year} is null or ${t.year} between 1 and 4`)])
 
 // price is in whole rupees; 0 means a free event. upiQrUrl, upiId, upiPayeeName and paymentInstructions are only used
 // when the event or its sessions cost money.

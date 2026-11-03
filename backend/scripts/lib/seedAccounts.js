@@ -20,9 +20,11 @@ export async function seedAccounts(accounts) {
     return false
   }
 
+  // Made-up student details, so seeded accounts can register without filling in /welcome
+  const withProfile = accounts.map((a, i) => ({ phone: `90000${String(i + 1).padStart(5, '0')}`, rollNumber: `DEMO-${i + 1}`, branch: 'CSE', year: 2, ...a }))
   await db
     .insert(users)
-    .values(accounts)
+    .values(withProfile)
     .onConflictDoUpdate({ target: users.email, set: { role: sql`excluded.role`, isActive: true } })
 
   const saved = await db.select().from(users).where(inArray(users.email, accounts.map((a) => a.email)))
